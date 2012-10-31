@@ -26,7 +26,7 @@ Hints:
 
 #ardrone
 roscore
-rosrun ardrone_autonomy ardrone_driver
+rosrun ardrone_autonomy ardrone_driver [-ip x.x.x.x]
 
 
 #git
