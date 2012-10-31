@@ -1,0 +1,15 @@
+<package>
+  <description brief="yudrone">
+
+     yudrone
+
+  </description>
+  <author>Michael Dicke</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>https://github.com/mdicke2s/yudrone</url>
+  <depend package="ardrone_autonomy"/>
+
+</package>
+
+
