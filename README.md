@@ -18,3 +18,20 @@ Interface:
 ```sh
 sdfsfd
 ```
+
+Hints:
+```sh
+#ros
+
+
+#ardrone
+roscore
+rosrun ardrone_autonomy ardrone_driver
+
+
+#git
+git add * [or <file>]
+git commit -m "message"
+git push origin master
+git pull
+```
