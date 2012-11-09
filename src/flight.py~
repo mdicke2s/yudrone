@@ -38,7 +38,7 @@ class Flight:
       abcd = input("linZ Val: ")
       cmd.angular.x = cmd.angular.y = 0
       cmd.angular.z = 0
-      cmd.linear.z = abcd
+      cmd.linear.z = abcd * 50
       cmd.linear.x = 0
       cmd.linear.y = 0
       cmd_vel_pub.publish( cmd )
