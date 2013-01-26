@@ -1,0 +1,332 @@
+#!/usr/bin/env python
+
+'''----------------------------------------------------------------------------
+This is the main file of the project whitin this script fte following
+services are executed:
+ * ardrone driver
+ * video output
+ * diagnosis
+ * input control
+-------------------------------------------------------------------------------
+Project:	yudrone
+Author:		Michael Dicke
+Repository:	https://github.com/mdicke2s/yudrone
+----------------------------------------------------------------------------'''
+
+# system
+import subprocess, time, os, wx, sys, getopt, struct
+
+# tkinter gui
+from Tkinter import *
+from tkMessageBox import showinfo
+from PIL import *
+
+# ros
+import roslib;
+roslib.load_manifest('yudrone')
+import rospy
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Empty, String
+from sensor_msgs.msg import Joy, Image
+from ardrone_autonomy.msg import Navdata
+
+
+
+
+'''----------------------------------------------------------------------------
+MAIN class
+opens gui and all attached services
+----------------------------------------------------------------------------'''
+class Flight():
+ 
+  def __init__(self, parent=None):    
+    
+    # init GUI
+    root = Tk()
+    root.title('yudrone flight')
+    self.videoWidget = VideoWidget(root)
+    self.videoWidget.pack(side=LEFT, padx=5, pady=5, fill=BOTH)
+    self.diagWidget = DiagWidget(root)
+    self.diagWidget.pack(side=TOP, padx=5, pady=5, fill=BOTH)
+    self.inputWidget = InputWidget(root)
+    self.inputWidget.pack(side=BOTTOM, padx=5, pady=5, fill=BOTH)
+    
+    # run
+    root.mainloop()
+             
+  def openDriver(self):
+    pub_log.publish("+++ OPENING DRIVER ++++++++++++++++++++++++++++")
+    #self.pipe_driver=subprocess.Popen(["rosrun","ardrone_autonomy","ardrone_driver"])
+    #time.sleep(10)
+   
+   
+   
+   
+'''----------------------------------------------------------------------------
+Frame, that shows one VIDEOSTREAM from the Ardrone
+choosable via radiobuttons
+----------------------------------------------------------------------------'''
+class VideoWidget(LabelFrame):
+  def __init__(self, parent=None, side=LEFT, anchor=W):
+    LabelFrame.__init__(self, parent, text="LiveView")
+    self.btnState = StringVar()
+    self.state='front'
+    self.sub_image = rospy.Subscriber("/ar/image", Image,self.handle_image)
+    
+    rbFront = Radiobutton(self,
+		text='front',
+		variable=self.btnState,
+		command=self.setView,
+		value='front',
+		state=ACTIVE)
+    rbBottom = Radiobutton(self,
+		text='bottom',
+		variable=self.btnState,
+		command=self.setView,
+		value='bottom')
+    rbBottom.pack(side=BOTTOM)
+    rbFront.pack(side=BOTTOM)
+    rbFront.select()
+    self.canvas=Canvas(self, height=360, width=640)
+    #self.label=Label(self, background='black', height=36, width=64)
+    
+    self.canvas.pack(side=TOP, fill=BOTH)
+    self.counter = 1
+      
+  def handle_image(self, camImage):
+    self.counter = self.counter + 1
+    #tmpNr = 0
+    if (self.counter % 25) == 0:
+      #rosTmpFileName = '/tmp/ros_%s.jpg' % tmpNr
+      #pilTmpFileName = '/tmp/pil_%s.gif' % tmpNr
+      #tmpNr = tmpNr + 1
+      
+      #print('ros-file')
+      #print(camImage)
+      #print('ros-data')
+      #print(camImage.data)
+      #self.im,self.data,self.dimsizes = imgmsg_to_pil(camImage)
+      #self.im = Image.open('/home/viki/pic.gif')
+      pImage = PhotoImage(file = '/home/viki/pic.gif')
+      #print('pil-im')
+      #print(self.im)
+      #print('pil-data')
+      #print(self.data)
+      #self.im.save('pic.gif')
+      #tmpFile = open(rosTmpFileName, 'w')
+      #print >>tmpFile 'camImage'
+      
+      #pi=PhotoImage(im)
+      #print(pi)
+      #self.canvas.create_image(0,0,data)
+      #image = BitmapImage(data=camImage.data)
+      #image = PhotoImage(height=360, width=640)
+      #pImage = PhotoImage(data=self.im)
+      #image.put(im)
+      self.canvas.create_image(0,0, image = pImage, anchor = NW)
+      #print(camImage)
+      #a=camImage
+  
+  def setView(self):
+    if self.btnState.get() == 'front' and self.state == 'bottom':
+      subprocess.call(["rosservice","call","/ardrone/togglecam"])
+      self.state = 'front'
+      pub_log.publish('Frontcam activated')
+    if self.btnState.get() == 'bottom' and self.state == 'front':
+      subprocess.call(["rosservice","call","/ardrone/togglecam"])
+      self.state = 'bottom'
+      pub_log.publish('Bottomcam activated') 
+
+      
+def imgmsg_to_pil(rosimage, encoding_to_mode = {
+        'mono8' :     'L',
+        '8UC1' :      'L',
+        '8UC3' :      'RGB',
+        'rgb8':       'RGB',
+        'bgr8':       'RGB',
+        'rgba8':      'RGBA',
+        'bgra8':      'RGBA',
+        'bayer_rggb': 'L',
+        'bayer_gbrg': 'L',
+        'bayer_grbg': 'L',
+        'bayer_bggr': 'L',
+        'yuv422':     'YCbCr',
+        'yuv411':     'YCbCr'}, PILmode_channels = { 'L' : 1, 'RGB' : 3, 'RGBA' : 4, 'YCbCr' : 3 }):
+    conversion = 'B'
+    channels = 1
+    if rosimage.encoding.find('32FC') >= 0:
+        conversion = 'f'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('64FC') >= 0:
+        conversion = 'd'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('8SC') >= 0:
+        conversion = 'b'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('8UC') >= 0:
+        conversion = 'B'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('16UC') >= 0:
+        conversion = 'H'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('16SC') >= 0:
+        conversion = 'h'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('32UC') >= 0:
+        conversion = 'I'
+        channels = int(rosimage.encoding[-1])
+    elif rosimage.encoding.find('32SC') >= 0:
+        conversion = 'i'
+        channels = int(rosimage.encoding[-1])
+    else:
+        if rosimage.encoding.find('rgb') >= 0 or rosimage.encoding.find('bgr') >= 0:
+            channels = 3
+  
+    data = struct.unpack( ('>' if rosimage.is_bigendian else '<') + '%d'%(rosimage.width*rosimage.height*channels) + conversion,rosimage.data)
+  
+    if conversion == 'f' or conversion == 'd':
+        dimsizes = [rosimage.height, rosimage.width, channels]
+        imagearr = numpy.array(255*I,dtype=numpy.uint8)
+        im = PIL.Image.frombuffer('RGB' if channels == 3 else 'L',dimsizes[1::-1],imagearr.tostring(), 'raw','RGB',0,1)
+        if channels == 3:
+            im = PIL.Image.merge('RGB',im.split()[-1::-1])
+        return im,data,dimsizes
+    else:
+        mode = encoding_to_mode[rosimage.encoding]
+        step_size = PILmode_channels[mode]
+        dimsizes = [rosimage.height, rosimage.width, step_size]
+        im = PIL.Image.frombuffer(mode,dimsizes[1::-1], rosimage.data,'raw',mode,0,1)
+        if mode == 'RGB':
+            im = PIL.Image.merge('RGB',im.split()[-1::-1])
+        return im,data,dimsizes
+      
+'''----------------------------------------------------------------------------
+Frame, that shows DIAGNOSTICS
+----------------------------------------------------------------------------'''
+class DiagWidget(LabelFrame):
+  def __init__(self, parent=None, side=LEFT, anchor=W):
+    LabelFrame.__init__(self, parent, text='Diagnostics')
+    self.state = StringVar()
+    
+    self.strBattery= StringVar()
+    self.strBattery.set('Battery: unknown')
+    Label(self, textvariable=self.strBattery).pack()
+    
+    self.strState= StringVar()
+    self.strState.set('State: unknown')
+    Label(self, textvariable=self.strState).pack()
+    
+    self.strAltd= StringVar()
+    self.strAltd.set('Altitude (mm): ')
+    Label(self, textvariable=self.strAltd).pack()
+    
+    #fake console
+    self.console=Canvas(self, background='black', height=200, width=400)
+    self.console.pack(side=TOP, fill=BOTH)
+    
+    
+    
+    self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
+    self.sub_log = rospy.Subscriber( "yudrone/log", String, self.handle_log )
+    
+  def handle_navdata(self, navdata):
+    self.strBattery.set("Battery: " + str(navdata.batteryPercent))
+    if navdata.state == 1:
+      currStatus='inited'
+    elif navdata.state == 2:
+      currStatus='landed'
+    elif navdata.state == 3 or navdata.state == 7:
+      currStatus='flying'
+    elif navdata.state == 4:
+      currStatus='hovering'
+    elif navdata.state == 6:
+      currStatus='taking off'
+    elif navdata.state == 8:
+      currStatus='landing'
+    else:
+      currStatus='unknown'
+    self.strState.set('Status: ' + currStatus)
+    self.strAltd.set('Altitude (mm): ' + str(navdata.altd))
+	
+  def handle_log(self, log):
+    print(log.data)
+  
+  
+  
+  
+  
+'''----------------------------------------------------------------------------
+Frame, that controlls INPUT
+----------------------------------------------------------------------------'''
+class InputWidget(LabelFrame):
+  def __init__(self, parent=None, anchor=W):
+    LabelFrame.__init__(self, parent, text='Input')
+    self.btnState = StringVar()
+    self.sub_joy = rospy.Subscriber( "joy", Joy, self.handle_joy )
+    
+    rbJoy = Radiobutton(self,
+		text='joypad',
+		variable=self.btnState,
+		command=(lambda: pub_log.publish('Input set to joypad') ),
+		value='joypad')
+    rbConsole = Radiobutton(self,
+		text='console',
+		variable=self.btnState,
+		command=(lambda: pub_log.publish('Input set to console') ),
+		value='console')
+		
+    rbJoy.pack()
+    rbConsole.pack()
+    rbJoy.select()
+    Entry(self).pack(side=TOP)
+      
+  def handle_joy(self, joy):
+    if self.btnState.get() == 'joypad':
+      # btn nr  for takeoff
+      if joy.buttons[3]==1:# and status["state"] == 'ground':
+	pub_log.publish('start command')
+	pub_takeoff.publish( Empty() )
+	time.sleep(0.1)
+      # btn nr  for land
+      if joy.buttons[1]==1:# and status["state"] == 'flight':
+	pub_log.publish('land command')
+	pub_land.publish( Empty() )
+	time.sleep(0.1)
+      # btn nr  for reset
+      if joy.buttons[0]==1:
+	pub_log.publish('reset command')
+	pub_reset.publish( Empty() )
+	time.sleep(0.1)
+    
+      # set yaw parameter
+      yaw = Twist()
+      yaw.angular.x = yaw.angular.y = 0
+      yaw.angular.z = joy.axes[2] * 3.14/2
+      yaw.linear.z = joy.axes[3] * 2.0
+      yaw.linear.x = joy.axes[1] * 1.0
+      yaw.linear.y = joy.axes[0] * 1.0
+      
+      # publish yaw to ardrone
+      pub_yaw.publish(yaw)
+
+'''----------------------------------------------------------------------------
+top-level-code
+STARTS application
+----------------------------------------------------------------------------'''
+if __name__ == '__main__':
+  # init node and open open logging topic
+  rospy.init_node('yudrone_flight')
+  pub_log = rospy.Publisher( "yudrone/log", String )
+  pub_land = rospy.Publisher( "ardrone/land", Empty )
+  pub_takeoff = rospy.Publisher( "ardrone/takeoff", Empty )
+  pub_reset = rospy.Publisher( "ardrone/reset", Empty )
+  pub_yaw = rospy.Publisher( "/cmd_vel", Twist )
+    
+  #self.sub_yaw = rospy.Subscriber( "yudrone/yaw", Twist, self.handle_yaw )
+  status = {"driver":0,	# driver on / off
+	   "battery":0,	# battery percentage
+	   "state":0}	# states: 0:Unknown 1:Inited 2:Landed 3,7:Flying 4:Hovering 6:Taking off 8:Landing
+  
+  # start application
+  app = Flight()
+  print 'Shutting down'
