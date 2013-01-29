@@ -6,7 +6,9 @@ Project:	yudrone
 Author:		Michael Dicke
 Repository:	https://github.com/mdicke2s/yudrone
 ----------------------------------------------------------------------------'''
-
+pub_takeoff = 0
+def initCommands(takeoff):
+  pub_takeoff = takeoff
 
 def Altitude(delta):
   '''
@@ -84,6 +86,7 @@ def TakeOff():
     Triggers built-in takeoff command.    
   '''
   print('TakeOff cmd')
+  pub_takeoff.publish( Empty() )
   
 def Land():
   '''

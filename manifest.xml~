@@ -10,9 +10,6 @@
   <url>https://github.com/mdicke2s/yudrone</url>
   <depend package="ardrone_autonomy"/>
   <depend package="joy" />
-  <depend package="ar_recog" />
-  <!--depend package="ar_pose" / should not be necessary  -->
-  <depend package="joy" />
   <depend package="image_transport" />
   <depend package="sensor_msgs"/>
 

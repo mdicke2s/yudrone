@@ -6,7 +6,9 @@ Project:	yudrone
 Author:		Michael Dicke
 Repository:	https://github.com/mdicke2s/yudrone
 ----------------------------------------------------------------------------'''
-
+pub_takeoff
+def initCommands(takeoff):
+  pub_takeoff = takeoff
 
 def Altitude(delta):
   '''
@@ -84,6 +86,7 @@ def TakeOff():
     Triggers built-in takeoff command.    
   '''
   print('TakeOff cmd')
+  pub_takeoff.publish( Empty() )
   
 def Land():
   '''
@@ -160,7 +163,7 @@ def Search(tagNr):
   Action:
     Ardrone will yaw slowly, until the specified tag [direction (string)] appears. Overrides all movement controls.
     If it rotated full 360 without finding the target, a warning is prompted.
-    [The optional parameter direction may be set „-„,changing the direction to "clockwise"]
+    [The optional parameter direction may be set "-",changing the direction to "clockwise"]
   Parameter:
     tagNr (integer)
   '''
