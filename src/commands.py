@@ -9,7 +9,8 @@ Repository:	https://github.com/mdicke2s/yudrone
 
 from flight import *
 from geometry_msgs.msg import Twist
-import time
+import rospy
+import math
 
 
 
@@ -23,10 +24,34 @@ class Commands:
     self.minAltitude = 50
     self.yawSpeed = 100
     self.hrzSpeed = 100
+    self.aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
     
-  def update(self, values):
-    if 'altitude' in values:
-      self.currAltitude = values['altitude']
+    self.navTimer = rospy.Timer(rospy.Duration(0.1), self.__onNavigate)
+    self.navdata = None
+
+  def __onNavigate(self, event = None):
+    if self.flight.rbJoypad.GetValue() == False:
+      # caculate values
+      yaw = Twist()
+      yaw.angular.x = self.aim['ax']
+      yaw.angular.y = self.aim['ay']
+      yaw.angular.z = self.aim['az']
+      # p-controller
+      #if self.navdata.altd > 50:
+	#yaw.linear.z = (self.aim['lz'] - self.navdata.altd) /10
+	#self.flight.pub_log.publish('lz: ' + str(yaw.linear.z))
+      yaw.linear.z = self.aim['lz']
+      yaw.linear.x = self.aim['lx']
+      yaw.linear.y = self.aim['ly']
+
+      # publish yaw to ardrone
+      self.flight.pub_yaw.publish(yaw)
+    
+  def updateNav(self, navdata):
+    self.navdata = navdata
+    
+  def updateTag(self, tag):
+    self.tag = tag
   
   '''****************************************************************************************************
   *												tresholds
@@ -42,11 +67,8 @@ class Commands:
     '''
     print('Altitude set to ' + str(delta))
     # set yaw parameter
-    yaw = Twist()
-    yaw.linear.z = delta
-    
-    # publish yaw to ardrone
-    self.flight.pub_yaw.publish(yaw)
+    self.aim['lz'] = delta
+    self.__reset_Yaw(math.fabs(delta)/200)
     
   def MaxAlt(self, val):
     '''
@@ -73,12 +95,17 @@ class Commands:
   '''****************************************************************************************************
   *											basic navigation
   ****************************************************************************************************'''
-  def reset_Yaw(self, delay = 0):
+  def __reset_Yaw(self, delay = 0):
     '''
-    pushes a zero yaw message
+    pushes a zero to yaw aim
     '''
-    time.sleep(delay)
-    self.flight.pub_yaw.publish(Twist())
+    self.flight.txtAim.SetLabel('Aim:\t\t\t\t' + str(self.aim))
+    rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
+    
+  def __onReset(self, event):
+    self.aim['ax'] = self.aim['ay'] = self.aim['az'] = 0
+    self.aim['lz'] = self.aim['lx'] = self.aim['ly'] = 0
+    self.flight.txtAim.SetLabel('Aim:\t\t\t\t' + str(self.aim))
   
   def Yaw(self, angle):
     '''
@@ -91,13 +118,8 @@ class Commands:
     '''
     print('Yaw ' + str(angle))
     # set yaw parameter
-    yaw = Twist()
-    yaw.angular.x = yaw.angular.y = 0
-    yaw.angular.z = angle
-        
-    # publish yaw to ardrone
-    self.flight.pub_yaw.publish(yaw)
-    self.reset_Yaw(0.5)
+    self.aim['az'] = angle/math.fabs(angle) * self.yawSpeed
+    self.__reset_Yaw(math.fabs(angle)/100)
     
   def YawSpeed(self, val):
     '''
@@ -119,13 +141,12 @@ class Commands:
     '''
     print('Horizontal movement')
     # set yaw parameter
-    yaw = Twist()
-    yaw.linear.x = x
-    yaw.linear.y = y
-    
-    # publish yaw to ardrone
-    self.flight.pub_yaw.publish(yaw)
-    self.reset_Yaw(0.5)
+    vectLen = math.sqrt( x*x + y*y )
+    self.flight.pub_log.publish('vectlen' + str( vectLen))
+    self.aim['lx'] = x/vectLen * self.hrzSpeed
+    self.aim['ly'] = y/vectLen * self.hrzSpeed
+    self.flight.pub_log.publish('lx: ' + str(self.aim['lx']))
+    self.__reset_Yaw(vectLen/100)
     
   def HrzSpeed(self, val):
     '''

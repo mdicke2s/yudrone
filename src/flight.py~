@@ -20,7 +20,7 @@ Repository:	https://github.com/mdicke2s/yudrone
 
 
 # system
-import subprocess, time, os, wx, sys, getopt, struct
+import subprocess, os, wx, sys, getopt, struct
 import threading
 import thread
 
@@ -36,9 +36,11 @@ from geometry_msgs.msg import Twist
 from std_msgs.msg import Empty, String
 from sensor_msgs.msg import Joy, Image
 from ardrone_autonomy.msg import Navdata
+from ar_recog.msg import Tags, Tag
 
 #local
 from commands import *
+from singleton import SingletonType
 
 XLIVEVIEW = 665
 YLIVEVIEW = 425
@@ -46,27 +48,12 @@ XWINDOW = 1200
 YWINDOW = 720
 PADDING = 5
 ARDRONE_IP = '192.168.1.1'
+ROSDIR = "/opt/ros/fuerte/bin/"
+ARRECOGDIR = '/home/viki/ros_workspace/ar_recog/bin'
 
 '''************************************************************************************************************************
-Singleton, thread safe
+main class of project (controller & view)
 ************************************************************************************************************************''' 
-class SingletonType(type):
-  def __new__(mcls, name, bases, namespace):
-    namespace.setdefault('__lock__', threading.RLock())
-    namespace.setdefault('__instance__', None)
-    return super(SingletonType, mcls).__new__(mcls, name, bases, namespace)
-
-  def __call__(cls, *args, **kw):
-    cls.__lock__.acquire()
-    try:
-      if cls.__instance__ is None:
-	instance = cls.__new__(cls, *args, **kw)
-        instance.__init__(*args, **kw)
-        cls.__instance__ = instance
-    finally:
-      cls.__lock__.release()
-    return cls.__instance__
-
 class Flight(wx.Frame):
   __metaclass__ = SingletonType
   
@@ -76,14 +63,14 @@ class Flight(wx.Frame):
     '''
     wx.Frame.__init__(self, None, title = title, size=(XWINDOW, YWINDOW))
     self.droneState = 2 # landed
-    self.initGui()
-    self.initRos()
-    
+    self.shell = None
+    self.__initGui()
+    self.__initRos()    
       
   '''************************************************************************************************************************
   GUI
   ************************************************************************************************************************'''
-  def initGui(self):  
+  def __initGui(self):  
     '''
     inits the yudrone GUI
     * layout
@@ -155,10 +142,20 @@ class Flight(wx.Frame):
     self.txtState = wx.StaticText(self)
     self.txtAltd = wx.StaticText(self)
     
-    self.txtConnection.SetLabel('Connection: NONE')
-    self.txtBattery.SetLabel('Battery: UNKNOWN')
-    self.txtState.SetLabel('Status: UNKNOWN')
-    self.txtAltd.SetLabel('Altitude (mm): ')
+    self.txtRotation = wx.StaticText(self)
+    self.txtMagnetometer = wx.StaticText(self)
+    self.txtAim = wx.StaticText(self)
+    self.txtTags = wx.StaticText(self)
+    
+    self.txtConnection.SetLabel('Connection:\t\tNONE')
+    self.txtBattery.SetLabel('Battery:\t\t\tUNKNOWN')
+    self.txtState.SetLabel('Status:\t\t\tUNKNOWN')
+    self.txtAltd.SetLabel('Altitude (mm):')
+    
+    self.txtRotation.SetLabel('Rotation: ')
+    self.txtMagnetometer.SetLabel('Magnetometer: ')
+    self.txtAim.SetLabel('Aim: ')
+    self.txtTags.SetLabel('Tags: ')
     
     #assemble right
     sizeRight.Add(wx.StaticText(self), 0, wx.ALL, 5)
@@ -166,6 +163,10 @@ class Flight(wx.Frame):
     sizeRight.Add(self.txtBattery, 0, wx.ALL, 5)
     sizeRight.Add(self.txtState, 0, wx.ALL, 5)
     sizeRight.Add(self.txtAltd, 0, wx.ALL, 5)
+    sizeRight.Add(self.txtRotation, 0, wx.ALL, 5)
+    sizeRight.Add(self.txtMagnetometer, 0, wx.ALL, 5)
+    sizeRight.Add(self.txtAim, 0, wx.ALL, 5)
+    sizeRight.Add(self.txtTags, 0, wx.ALL, 5)
     
     # stage 4: finalize ............................................
     #finalize
@@ -174,6 +175,7 @@ class Flight(wx.Frame):
     self.SetSizer(sizeAll)    
     self.Bind(wx.EVT_CLOSE, self.OnClose)
     rospy.loginfo('GUI initialized')
+    rospy.loginfo('yudrone is ready...')
 
   def OnClose(self, event='NONE'):
     '''
@@ -193,7 +195,7 @@ class Flight(wx.Frame):
   '''************************************************************************************************************************
   ROS
   ************************************************************************************************************************'''
-  def initRos(self):
+  def __initRos(self):
     '''
     Initializes Ros environment including
     * roscore
@@ -233,13 +235,27 @@ class Flight(wx.Frame):
       rospy.logfatal('No roscore; shutting down')
       self.Destroy()
     rospy.loginfo('Roscore is running')
+    
+    # .............................................................................
+    rospy.loginfo('stage 2: check network ....') 
+    # .............................................................................
+    networkConnected = os.system('ping ' + ARDRONE_IP + ' -c 4 -i 0.2 -w 3 > /dev/null')
+    if networkConnected != 0:
+      rospy.logerr('not connected to ardrone (IP: ' + ARDRONE_IP + ')')
+      dlg = wx.MessageDialog(self,
+	  "There is no ardrone connected (at IP= " + ARDRONE_IP + ")",
+	  "Network error", wx.OK|wx.ICON_ERROR)
+      result = dlg.ShowModal()
+      dlg.Destroy()
+    else:
+      rospy.loginfo('connected to ardrone (IP: ' + ARDRONE_IP + ')')
 	
     # .............................................................................
-    rospy.loginfo('stage 2: check ardrone_driver ...') 
+    rospy.loginfo('stage 3: check ardrone_driver ...') 
     # .............................................................................
     # check node
-    ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
-    if ardroneDriverRunnig != 0:
+    self.ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
+    if self.ardroneDriverRunnig != 0:
       # no driver
       dlg = wx.MessageDialog(self,
 	  "Ardrone_driver is not running. Should it be executed by yudrone?",
@@ -251,14 +267,15 @@ class Flight(wx.Frame):
 	self.openDriver()
     
     # check node again
-    ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
-    if ardroneDriverRunnig != 0:
+    self.ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
+    if self.ardroneDriverRunnig != 0:
       rospy.logerr('ardrone_driver is not running')
     else:
       rospy.loginfo('ardrone_driver is running')
+    self.navdataCounter=0
     
     # .............................................................................  
-    rospy.loginfo('stage 3: check joy ....') 
+    rospy.loginfo('stage 4: check joy ....') 
     # .............................................................................
     joypadConnected = os.system('test -e /dev/input/js2')
     if joypadConnected != 0:
@@ -277,6 +294,7 @@ class Flight(wx.Frame):
       if result == wx.ID_YES:
 	# open joy_node as subprocess
 	self.openJoyNode()
+    self.joyMessages = 0
 	
     # check joynode again
     joyNodeRunning = os.system('rosnode list | grep /joy_node > /dev/null')
@@ -286,24 +304,9 @@ class Flight(wx.Frame):
       rospy.loginfo('joynode is running')
     
     # .............................................................................
-    rospy.loginfo('stage 4: check network ....') 
-    # .............................................................................
-    networkConnected = os.system('ping ' + ARDRONE_IP + ' -c 4 -i 0.2 -w 3 > /dev/null')
-    if networkConnected != 0:
-      rospy.logerr('not connected to ardrone (IP: ' + ARDRONE_IP + ')')
-      dlg = wx.MessageDialog(self,
-	  "There is no ardrone connected (at IP= " + ARDRONE_IP + ")",
-	  "Network error", wx.OK|wx.ICON_ERROR)
-      result = dlg.ShowModal()
-      dlg.Destroy()
-    else:
-      rospy.loginfo('connected to ardrone (IP: ' + ARDRONE_IP + ')')
-    
-    
-    # .............................................................................
     rospy.loginfo('stage 5: check ar_toolkit ....') 
     # .............................................................................
-    arNodeRunning = os.system('rosnode list | grep /ar_recog > /dev/null')
+    arNodeRunning = os.system('rostopic list | grep /ar/image > /dev/null')
     if arNodeRunning != 0:
       # no ar_node
       dlg = wx.MessageDialog(self,
@@ -316,13 +319,14 @@ class Flight(wx.Frame):
 	self.openArToolkit()
 	
     # check ar_node again
-    arNodeRunning = os.system('rosnode list | grep /ar_recog > /dev/null')
+    arNodeRunning = os.system('rostopic list | grep /ar/image > /dev/null')
     if arNodeRunning != 0:
       rospy.logerr('ar_node is not running')
       imageTopic = '/ardrone/image_raw'
     else:
       rospy.loginfo('ar_node is running')
       imageTopic = '/ar/image'
+    self.tagNrCounter=0
     
     # .............................................................................
     rospy.loginfo('stage 6: init own node ...') 
@@ -341,8 +345,9 @@ class Flight(wx.Frame):
     self.sub_joy = rospy.Subscriber( "joy", Joy, self.handle_joy )
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
     self.sub_log = rospy.Subscriber( "yudrone/log", String, self.handle_log )
+    self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags )
     self.sub_image = rospy.Subscriber(imageTopic, Image,self.handle_image)
-    time.sleep(0.1)
+    rospy.sleep(0.1)
     
     #variables
     self.camState='front'
@@ -350,25 +355,26 @@ class Flight(wx.Frame):
     #stage 7: finalize ............................................
     self.OnRBInput()
     self.OnRBVideo()
-    self.pub_log.publish('ROS initialized')    
+    self.watchdog = rospy.Timer(rospy.Duration(1), self.__watchdog)
+    self.pub_log.publish('ROS initialized')
     
   def openDriver(self):
     '''
     opens ardrone_driver in a subprocess
     '''
     rospy.loginfo("open driver...")
-    cmd="/opt/ros/fuerte/bin/rosrun ardrone_autonomy ardrone_driver"
+    cmd= ROSDIR + "rosrun ardrone_autonomy ardrone_driver"
     self.pipe_ros=subprocess.Popen(['gnome-terminal', '--command='+cmd])
-    time.sleep(10)
+    rospy.sleep(10)
   
   def openRoscore(self):
     '''
     opens ardrone_driver in a subprocess
     '''
     rospy.loginfo('open roscore...')
-    cmd="/opt/ros/fuerte/bin/roscore"
+    cmd=ROSDIR + "roscore"
     self.pipe_ros=subprocess.Popen(['gnome-terminal', '--command='+cmd])
-    time.sleep(3)
+    rospy.sleep(3)
     
   def openJoyNode(self):
     '''
@@ -376,9 +382,9 @@ class Flight(wx.Frame):
     '''
     rospy.loginfo('open joynode...')
     rospy.set_param("joy_node/dev", "/dev/input/js2")
-    cmd="/opt/ros/fuerte/bin/rosrun joy joy_node"
+    cmd=ROSDIR + "rosrun joy joy_node"
     self.pipe_joy=subprocess.Popen(['gnome-terminal', '--command='+cmd])
-    time.sleep(3)
+    rospy.sleep(3)
     
   def openArToolkit(self):
     '''
@@ -386,9 +392,9 @@ class Flight(wx.Frame):
     '''
     rospy.loginfo('open ar_toolkit...')
     rospy.set_param('aov', 0.67)
-    cmd="/opt/ros/fuerte/bin/rosrun ar_recog ar_recog image:=/ardrone/image_raw"
-    self.pipe_ar=subprocess.Popen(['gnome-terminal', '--command='+cmd])
-    time.sleep(1)
+    cmd=ROSDIR + "rosrun ar_recog ar_recog image:=/ardrone/image_raw"
+    self.pipe_ar=subprocess.Popen(['gnome-terminal', '--command='+cmd, '--working-directory=' + ARRECOGDIR])
+    rospy.sleep(1)
     
   '''************************************************************************************************************************
   VIDEO
@@ -423,31 +429,66 @@ class Flight(wx.Frame):
     
   '''************************************************************************************************************************
   DIAGNISTICS
-  ************************************************************************************************************************'''            
-  def handle_navdata(self, navdata):
+  ************************************************************************************************************************'''  
+  def setCommands(self, shell):
+    self.shell = shell 
+   
+  def __watchdog(self, event = None):
+    self.ardroneDriverRunnig = os.system('rosnode ping -c2 /ardrone_driver | grep "xmlrpc reply from" > /dev/null')
+  
+  def printNavdata(self, navdata):
     '''
     Callback function for navigation data comming from ardrone
     '''
-    self.txtConnection.SetLabel('Connection: GOOD') #TODO put in watchdog
-    self.txtBattery.SetLabel("Battery: " + str(navdata.batteryPercent))
-    if navdata.state == 1:
-      currStatus='inited'
-    elif navdata.state == 2:
-      currStatus='landed'
-    elif navdata.state == 3 or navdata.state == 7:
-      currStatus='flying'
-    elif navdata.state == 4:
-      currStatus='hovering'
-    elif navdata.state == 6:
-      currStatus='taking off'
-    elif navdata.state == 8:
-      currStatus='landing'
-    else:
-      currStatus='emergency'
-    self.txtState.SetLabel('Status: ' + currStatus)
-    self.txtAltd.SetLabel('Altitude (mm): ' + str(navdata.altd))
-    self.droneState = navdata.state
-    #shell.update({"altitude":77})
+    if self.navdataCounter % 10 == 0:
+      if self.ardroneDriverRunnig == 0:
+	self.txtConnection.SetLabel('Connection:\t\tGOOD')
+      else:
+	self.txtConnection.SetLabel('Connection:\t\tLOST')
+	
+      self.txtBattery.SetLabel("Battery:\t\t\t%d" %navdata.batteryPercent)
+      
+      if navdata.state == 1:
+	currStatus='inited'
+      elif navdata.state == 2:
+	currStatus='landed'
+      elif navdata.state == 3 or navdata.state == 7:
+	currStatus='flying'
+      elif navdata.state == 4:
+	currStatus='hovering'
+      elif navdata.state == 6:
+	currStatus='taking off'
+      elif navdata.state == 8:
+	currStatus='landing'
+      else:
+	currStatus='emergency'
+      self.txtState.SetLabel('Status:\t\t\t' + currStatus)    
+      
+      self.txtAltd.SetLabel('Altitude (mm):\t%d' %navdata.altd)
+      self.txtRotation.SetLabel('Rotation:\t\t\tX:%d\tY:%d\tZ:%d' %(navdata.rotX, navdata.rotY, navdata.rotZ))
+      self.txtMagnetometer.SetLabel('Magnetometer:\tX:%d\tY:%d\tZ:%d' %(navdata.magX, navdata.magY, navdata.magZ))
+      self.droneState = navdata.state
+    
+  
+  def handle_navdata(self, navdata):
+    self.navdataCounter += 1
+    wx.CallAfter(self.printNavdata, navdata)
+    if self.shell != None:
+      wx.CallAfter(shell.updateNav, navdata) # call asynchon
+      
+  def print_tags(self, msg):
+    self.tagNrCounter += 1
+    if self.tagNrCounter%10 == 0:
+      nrOfTags = msg.tag_count
+      string = ""
+      for tag in msg.tags:
+	string += "[%d] X:%d  Y:%d  D:%d\t" %(tag.id, tag.x, tag.y, tag.distance)
+      self.txtTags.SetLabel('Tags:\t\t\t' + string)
+      
+  def handle_tags(self, msg):
+    wx.CallAfter(self.print_tags, msg)
+    if self.shell != None:
+      wx.CallAfter(shell.updateTag, msg) # call asynchon
 	
   def handle_log(self, log):
     '''
@@ -485,20 +526,20 @@ class Flight(wx.Frame):
     if joy.buttons[3]==1: # and self.rbJoypad.GetValue() == True:# and status["state"] == 'ground':
       self.pub_log.publish('start command')
       self.pub_takeoff.publish( Empty() )
-      time.sleep(0.1)
+      rospy.sleep(0.1)
     # btn nr  for land
     if joy.buttons[1]==1:# and self.rbJoypad.GetValue() == True:# and status["state"] == 'flight':
       self.pub_log.publish('land command')
       self.pub_land.publish( Empty() )
-      time.sleep(0.1)
+      rospy.sleep(0.1)
     # btn nr  for emergency
     if joy.buttons[0]==1:
-      if droneState != 0:
+      if self.droneState != 0:
 	self.pub_log.publish('emergency mode on')
       else:
 	self.pub_log.publish('emergency mode off')
       self.pub_emergency.publish( Empty() )
-      time.sleep(0.1)
+      rospy.sleep(0.1)
     # btn for stop
     if joy.buttons[2]==1:
       yaw = Twist()
@@ -514,11 +555,14 @@ class Flight(wx.Frame):
       yaw.linear.x = joy.axes[1] * 1.0
       yaw.linear.y = joy.axes[0] * 1.0
       
+      self.joyMessages += 1
+      if self.joyMessages%10 == 0:
+	self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.1f\tLY:%.1f\tLZ:%.1f\tAZ:%.1f' %(yaw.linear.x, yaw.linear.y, yaw.linear.z, yaw.angular.z))
+	
       # publish yaw to ardrone
       self.pub_yaw.publish(yaw)
       
-  def OnSelectCmd(self, event):
-    
+  def OnSelectCmd(self, event):    
     '''
     Callback function for selecting command from combobox
     '''
@@ -539,6 +583,7 @@ if __name__ == '__main__':
     app = wx.App(redirect=False)
     flight = Flight()
     shell = Commands(flight)
+    flight.setCommands(shell)
     flight.Show(True)
     app.MainLoop()
     #if droneState != 2 or droneState != 0:

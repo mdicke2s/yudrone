@@ -1,59 +1,28 @@
 #!/usr/bin/env python
 
 '''************************************************************************************************************************
-This is the main file of the project whitin this script the following
-services are executed:
- * ardrone driver
- * video output
- * diagnosis
- * input control
+
 ***************************************************************************************************************************
 TODO
-* add watchdog **> http://www.ros.org/wiki/rospy/Overview/Time
-* ar_recog error
-* stage 4
+
 ***************************************************************************************************************************
 Project:	yudrone
 Author:		Michael Dicke
 Repository:	https://github.com/mdicke2s/yudrone
 ************************************************************************************************************************'''
 
-
-# system
-import subprocess, os, wx, sys, getopt, struct
-import threading
-import thread
-
 # wx gui
 import wx
 import wx.py
 
 # ros
-import roslib;
-roslib.load_manifest('yudrone')
+import roslib.messages
+import roslib.names
 import rospy
-from geometry_msgs.msg import Twist
-from std_msgs.msg import Empty, String
-from sensor_msgs.msg import Joy, Image
+import rosgraph
 from ardrone_autonomy.msg import Navdata
-from ar_recog.msg import Tags, Tag
 
-#local
-from commands import *
-from singleton import SingletonType
 
-XLIVEVIEW = 665
-YLIVEVIEW = 425
-XWINDOW = 1200
-YWINDOW = 720
-PADDING = 5
-ARDRONE_IP = '192.168.1.1'
-ROSDIR = "/opt/ros/fuerte/bin/"
-ARRECOGDIR = '/home/viki/ros_workspace/ar_recog/bin'
-
-'''************************************************************************************************************************
-main class of project (controller & view)
-************************************************************************************************************************''' 
 class Flight(wx.Frame):
   __metaclass__ = SingletonType
   
@@ -64,13 +33,14 @@ class Flight(wx.Frame):
     wx.Frame.__init__(self, None, title = title, size=(XWINDOW, YWINDOW))
     self.droneState = 2 # landed
     self.shell = None
-    self.__initGui()
-    self.__initRos()    
+    self.initGui()
+    self.initRos()
+    
       
   '''************************************************************************************************************************
   GUI
   ************************************************************************************************************************'''
-  def __initGui(self):  
+  def initGui(self):  
     '''
     inits the yudrone GUI
     * layout
@@ -142,20 +112,10 @@ class Flight(wx.Frame):
     self.txtState = wx.StaticText(self)
     self.txtAltd = wx.StaticText(self)
     
-    self.txtRotation = wx.StaticText(self)
-    self.txtMagnetometer = wx.StaticText(self)
-    self.txtAim = wx.StaticText(self)
-    self.txtTags = wx.StaticText(self)
-    
-    self.txtConnection.SetLabel('Connection:\t\tNONE')
-    self.txtBattery.SetLabel('Battery:\t\t\tUNKNOWN')
-    self.txtState.SetLabel('Status:\t\t\tUNKNOWN')
-    self.txtAltd.SetLabel('Altitude (mm):')
-    
-    self.txtRotation.SetLabel('Rotation: ')
-    self.txtMagnetometer.SetLabel('Magnetometer: ')
-    self.txtAim.SetLabel('Aim: ')
-    self.txtTags.SetLabel('Tags: ')
+    self.txtConnection.SetLabel('Connection: NONE')
+    self.txtBattery.SetLabel('Battery: UNKNOWN')
+    self.txtState.SetLabel('Status: UNKNOWN')
+    self.txtAltd.SetLabel('Altitude (mm): ')
     
     #assemble right
     sizeRight.Add(wx.StaticText(self), 0, wx.ALL, 5)
@@ -163,10 +123,6 @@ class Flight(wx.Frame):
     sizeRight.Add(self.txtBattery, 0, wx.ALL, 5)
     sizeRight.Add(self.txtState, 0, wx.ALL, 5)
     sizeRight.Add(self.txtAltd, 0, wx.ALL, 5)
-    sizeRight.Add(self.txtRotation, 0, wx.ALL, 5)
-    sizeRight.Add(self.txtMagnetometer, 0, wx.ALL, 5)
-    sizeRight.Add(self.txtAim, 0, wx.ALL, 5)
-    sizeRight.Add(self.txtTags, 0, wx.ALL, 5)
     
     # stage 4: finalize ............................................
     #finalize
@@ -195,7 +151,7 @@ class Flight(wx.Frame):
   '''************************************************************************************************************************
   ROS
   ************************************************************************************************************************'''
-  def __initRos(self):
+  def initRos(self):
     '''
     Initializes Ros environment including
     * roscore
@@ -254,8 +210,8 @@ class Flight(wx.Frame):
     rospy.loginfo('stage 3: check ardrone_driver ...') 
     # .............................................................................
     # check node
-    self.ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
-    if self.ardroneDriverRunnig != 0:
+    ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
+    if ardroneDriverRunnig != 0:
       # no driver
       dlg = wx.MessageDialog(self,
 	  "Ardrone_driver is not running. Should it be executed by yudrone?",
@@ -267,12 +223,11 @@ class Flight(wx.Frame):
 	self.openDriver()
     
     # check node again
-    self.ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
-    if self.ardroneDriverRunnig != 0:
+    ardroneDriverRunnig = os.system('rosnode list | grep /ardrone > /dev/null')
+    if ardroneDriverRunnig != 0:
       rospy.logerr('ardrone_driver is not running')
     else:
       rospy.loginfo('ardrone_driver is running')
-    self.navdataCounter=0
     
     # .............................................................................  
     rospy.loginfo('stage 4: check joy ....') 
@@ -343,7 +298,6 @@ class Flight(wx.Frame):
     self.sub_joy = rospy.Subscriber( "joy", Joy, self.handle_joy )
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
     self.sub_log = rospy.Subscriber( "yudrone/log", String, self.handle_log )
-    self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags )
     self.sub_image = rospy.Subscriber(imageTopic, Image,self.handle_image)
     rospy.sleep(0.1)
     
@@ -353,7 +307,6 @@ class Flight(wx.Frame):
     #stage 7: finalize ............................................
     self.OnRBInput()
     self.OnRBVideo()
-    self.watchdog = rospy.Timer(rospy.Duration(1), self.__watchdog)
     self.pub_log.publish('ROS initialized')
     
   def openDriver(self):
@@ -429,63 +382,34 @@ class Flight(wx.Frame):
   DIAGNISTICS
   ************************************************************************************************************************'''  
   def setCommands(self, shell):
-    self.shell = shell 
-   
-  def __watchdog(self, event = None):
-    self.ardroneDriverRunnig = os.system('rosnode ping -c2 /ardrone_driver | grep "xmlrpc reply from" > /dev/null')
-  
-  def printNavdata(self, navdata):
+   self.shell = shell 
+    
+  def handle_navdata(self, navdata):
     '''
     Callback function for navigation data comming from ardrone
     '''
-    if self.navdataCounter % 10 == 0:
-      if self.ardroneDriverRunnig == 0:
-	self.txtConnection.SetLabel('Connection:\t\tGOOD')
-      else:
-	self.txtConnection.SetLabel('Connection:\t\tLOST')
-	
-      self.txtBattery.SetLabel("Battery:\t\t\t%d" %navdata.batteryPercent)
-      
-      if navdata.state == 1:
-	currStatus='inited'
-      elif navdata.state == 2:
-	currStatus='landed'
-      elif navdata.state == 3 or navdata.state == 7:
-	currStatus='flying'
-      elif navdata.state == 4:
-	currStatus='hovering'
-      elif navdata.state == 6:
-	currStatus='taking off'
-      elif navdata.state == 8:
-	currStatus='landing'
-      else:
-	currStatus='emergency'
-      self.txtState.SetLabel('Status:\t\t\t' + currStatus)    
-      
-      self.txtAltd.SetLabel('Altitude (mm):\t%d' %navdata.altd)
-      self.txtRotation.SetLabel('Rotation:\t\t\tX:%d\tY:%d\tZ:%d' %(navdata.rotX, navdata.rotY, navdata.rotZ))
-      self.txtMagnetometer.SetLabel('Magnetometer:\tX:%d\tY:%d\tZ:%d' %(navdata.magX, navdata.magY, navdata.magZ))
-      self.droneState = navdata.state
-    
-  
-  def handle_navdata(self, navdata):
-    self.navdataCounter += 1
-    wx.CallAfter(self.printNavdata, navdata)
+    self.txtConnection.SetLabel('Connection: GOOD') #TODO put in watchdog
+    self.txtBattery.SetLabel("Battery: " + str(navdata.batteryPercent))
+    if navdata.state == 1:
+      currStatus='inited'
+    elif navdata.state == 2:
+      currStatus='landed'
+    elif navdata.state == 3 or navdata.state == 7:
+      currStatus='flying'
+    elif navdata.state == 4:
+      currStatus='hovering'
+    elif navdata.state == 6:
+      currStatus='taking off'
+    elif navdata.state == 8:
+      currStatus='landing'
+    else:
+      currStatus='emergency'
+    self.txtState.SetLabel('Status: ' + currStatus)
+    self.txtAltd.SetLabel('Altitude (mm): ' + str(navdata.altd))
+    self.droneState = navdata.state
+    #print(navdata)
     if self.shell != None:
-      wx.CallAfter(shell.updateNav, navdata) # call asynchon
-      
-  def print_tags(self, msg):
-    if self.navdataCounter%10 == 0:
-      nrOfTags = msg.tag_count
-      string = ""
-      for tag in msg.tags:
-	string += "[%d] X:%d  Y:%d  D:%d\t" %(tag.id, tag.x, tag.y, tag.distance)
-      self.txtTags.SetLabel('Tags:\t\t\t' + string)
-      
-  def handle_tags(self, msg):
-    wx.CallAfter(self.print_tags, msg)
-    if self.shell != None:
-      wx.CallAfter(shell.updateTag, msg) # call asynchon
+      wx.CallAfter(shell.update, navdata) # call asynchon
 	
   def handle_log(self, log):
     '''
@@ -552,13 +476,11 @@ class Flight(wx.Frame):
       yaw.linear.x = joy.axes[1] * 1.0
       yaw.linear.y = joy.axes[0] * 1.0
       
-      if self.navdataCounter%10 == 0:
-	self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.1f\tLY:%.1f\tLZ:%.1f\tAZ:%.1f' %(yaw.linear.x, yaw.linear.y, yaw.linear.z, yaw.angular.z))
-	
       # publish yaw to ardrone
       self.pub_yaw.publish(yaw)
       
-  def OnSelectCmd(self, event):    
+  def OnSelectCmd(self, event):
+    
     '''
     Callback function for selecting command from combobox
     '''
