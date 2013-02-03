@@ -20,7 +20,7 @@ Repository:	https://github.com/mdicke2s/yudrone
 
 
 # system
-import subprocess, os, wx, sys, getopt, struct
+import subprocess, os, sys, getopt, struct
 import threading
 import thread
 
@@ -41,6 +41,7 @@ from ar_recog.msg import Tags, Tag
 #local
 from commands import *
 from singleton import SingletonType
+import plot
 
 XLIVEVIEW = 665
 YLIVEVIEW = 425
@@ -61,7 +62,7 @@ class Flight(wx.Frame):
     '''
     Constructor
     '''
-    wx.Frame.__init__(self, None, title = title, size=(XWINDOW, YWINDOW))
+    wx.Frame.__init__(self, None, wx.NewId(), title = title, size=(XWINDOW, YWINDOW))
     self.droneState = 2 # landed
     self.shell = None
     self.__initGui()
@@ -146,6 +147,10 @@ class Flight(wx.Frame):
     self.txtMagnetometer = wx.StaticText(self)
     self.txtAim = wx.StaticText(self)
     self.txtTags = wx.StaticText(self)
+    #self.txtPlotA= wx.StaticText(self)
+    #self.plotA = plot.GraphPanel(self)
+    #self.txtPlotB= wx.StaticText(self)
+    #self.plotB = plot.GraphPanel(self)
     
     self.txtConnection.SetLabel('Connection:\t\tNONE')
     self.txtBattery.SetLabel('Battery:\t\t\tUNKNOWN')
@@ -156,6 +161,8 @@ class Flight(wx.Frame):
     self.txtMagnetometer.SetLabel('Magnetometer: ')
     self.txtAim.SetLabel('Aim: ')
     self.txtTags.SetLabel('Tags: ')
+    #self.txtPlotA.SetLabel('Rotation-Graph XYZ (rgb) ')
+    #self.txtPlotB.SetLabel('Magnetometer-Graph XYZ (rgb) ')
     
     #assemble right
     sizeRight.Add(wx.StaticText(self), 0, wx.ALL, 5)
@@ -167,6 +174,10 @@ class Flight(wx.Frame):
     sizeRight.Add(self.txtMagnetometer, 0, wx.ALL, 5)
     sizeRight.Add(self.txtAim, 0, wx.ALL, 5)
     sizeRight.Add(self.txtTags, 0, wx.ALL, 5)
+    #sizeRight.Add(self.txtPlotA, 0, wx.EXPAND, 5)
+    #sizeRight.Add(self.plotA, 0, wx.EXPAND, 5)
+    #sizeRight.Add(self.txtPlotB, 0, wx.EXPAND, 5)
+    #sizeRight.Add(self.plotB, 0, wx.EXPAND, 5)
     
     # stage 4: finalize ............................................
     #finalize
@@ -466,6 +477,11 @@ class Flight(wx.Frame):
       self.txtRotation.SetLabel('Rotation:\t\t\tX:%d\tY:%d\tZ:%d' %(navdata.rotX, navdata.rotY, navdata.rotZ))
       self.txtMagnetometer.SetLabel('Magnetometer:\tX:%d\tY:%d\tZ:%d' %(navdata.magX, navdata.magY, navdata.magZ))
       self.droneState = navdata.state
+      
+      #wx.CallAfter(self.plotA.handle_xyz, {'x':navdata.rotX, 'y':navdata.rotY, 'z':navdata.rotZ})
+      #self.plotA.handle_xyz({'x':navdata.rotX, 'y':navdata.rotY, 'z':navdata.rotZ})
+      #wx.CallAfter(self.plotB.handle_xyz, {'x':navdata.magX, 'y':navdata.magY, 'z':navdata.magZ})
+      #self.plotB.handle_xyz({'x':navdata.magX, 'y':navdata.magY, 'z':navdata.magZ})
     
   
   def handle_navdata(self, navdata):
