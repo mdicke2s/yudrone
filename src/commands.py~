@@ -8,29 +8,67 @@ Repository:	https://github.com/mdicke2s/yudrone
 ***********************************************************************************************'''
 
 from flight import *
+from ar_recog.msg import Tags, Tag
 from geometry_msgs.msg import Twist
 import rospy
 import math
+roslib.load_manifest('yudrone')
 
-
+PATTERNS = {0:'4x4_45.patt', 1:'4x4_47.patt', 2:'4x4_91.patt', 3:'4x4_93.patt', 4:'patt.hiro'}
+NAVRATE = 10.0 #Hz
 
 class Commands:
   '''****************************************************************************************************
   *										administrative methods
   ****************************************************************************************************'''
-  def __init__(self, flight):
-    self.flight = flight
+  '''
+  constructor
+  flight (optional parameter) is yudrone gui
+  '''
+  def __init__(self, flight=None):
+    if flight == None:
+      rospy.init_node('yudrone_cmd')
+      rospy.loginfo("init 'yudrone commands' using gui")
+      self.pub_land = rospy.Publisher( "ardrone/land", Empty )
+      self.pub_takeoff = rospy.Publisher( "ardrone/takeoff", Empty )
+      self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )
+      self.pub_yaw = rospy.Publisher( "/cmd_vel", Twist )
+      self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.updateNav )
+      self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )
+      self.consoleTimer = rospy.Timer(rospy.Duration(0.5), self.__onCmdOut)
+      self.updateNavSwitch(True)
+      self.hasGui = False
+    else:
+      rospy.loginfo("init 'yudrone commands' using gui")
+      self.pub_land = flight.pub_land
+      self.pub_takeoff = flight.pub_takeoff
+      self.pub_emergency = flight.pub_emergency
+      self.pub_yaw = flight.pub_yaw
+      self.updateNavSwitch(False)
+      self.hasGui = True
+    
     self.maxAltitude = 3000
     self.minAltitude = 50
     self.yawSpeed = 100
     self.hrzSpeed = 100
     self.aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
     
-    self.navTimer = rospy.Timer(rospy.Duration(0.1), self.__onNavigate)
+    self.navTimer = rospy.Timer(rospy.Duration(1.0/NAVRATE), self.__onNavigate)
     self.navdata = None
+  
+  '''
+  this function is contigiously called by a timer  
+  rate = 2Hz
+  '''
+  def __onCmdOut(self, event = None):
+    rospy.loginfo('Aim: ' + str(self.aim))
 
+  '''
+  this function is contigiously called by a timer  
+  rate = NAVRATE
+  '''
   def __onNavigate(self, event = None):
-    if self.flight.rbJoypad.GetValue() == False:
+    if self.NavigateSwitch == True:
       # caculate values
       yaw = Twist()
       yaw.angular.x = self.aim['ax']
@@ -39,23 +77,44 @@ class Commands:
       # p-controller
       #if self.navdata.altd > 50:
 	#yaw.linear.z = (self.aim['lz'] - self.navdata.altd) /10
-	#self.flight.pub_log.publish('lz: ' + str(yaw.linear.z))
+	#rospy.loginfo('lz: ' + str(yaw.linear.z))
       yaw.linear.z = self.aim['lz']
       yaw.linear.x = self.aim['lx']
       yaw.linear.y = self.aim['ly']
-      #self.flight.pub_log.publish('aim: ' + str(self.aim))
-      
-      if self.flight.navdataCounter % 10 == 0:
-	self.flight.txtAim.SetLabel('Aim:\t\t\t\t' + str(self.aim))
 
       # publish yaw to ardrone
-      self.flight.pub_yaw.publish(yaw)
+      self.pub_yaw.publish(yaw)
     
+  '''
+  set navdata (from ardrone)
+  '''
   def updateNav(self, navdata):
     self.navdata = navdata
     
-  def updateTag(self, tag):
-    self.tag = tag
+  '''
+  set tags (from artoolkit)
+  '''
+  def updateTags(self, tagMsg):
+    self.tagMsg = tagMsg
+  
+  '''
+  change camera resolution
+  '''
+  def updateResolution(self, height, width):
+    rospy.loginfo('camera resolution set to %d x %d' %(width, height))
+    self.imgheight = height
+    self.imgwidth = width
+    
+  '''
+  enable or disable __onNavigate
+  '''
+  def updateNavSwitch(self, switch):
+    self.NavigateSwitch = switch
+    if switch == True:
+      rospy.loginfo('command driven navigation ENABLED')
+    else:
+      rospy.loginfo('command driven navigation DISABLED')
+    
   
   '''****************************************************************************************************
   *												tresholds
@@ -104,12 +163,10 @@ class Commands:
     pushes a zero to yaw aim
     '''
     rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
-    self.flight.pub_log.publish('aim: ' + str(self.aim))
     
   def __onReset(self, event):
     self.aim['ax'] = self.aim['ay'] = self.aim['az'] = 0
     self.aim['lz'] = self.aim['lx'] = self.aim['ly'] = 0
-    self.flight.pub_log.publish('aim: ' + str(self.aim))
   
   def Yaw(self, angle):
     '''
@@ -146,10 +203,10 @@ class Commands:
     print('Horizontal movement')
     # set yaw parameter
     vectLen = math.sqrt( x*x + y*y )
-    self.flight.pub_log.publish('vectlen' + str( vectLen))
+    rospy.loginfo('vectlen' + str( vectLen))
     self.aim['lx'] = x/vectLen * self.hrzSpeed
     self.aim['ly'] = y/vectLen * self.hrzSpeed
-    self.flight.pub_log.publish('lx: ' + str(self.aim['lx']))
+    rospy.loginfo('lx: ' + str(self.aim['lx']))
     self.__reset_Yaw(vectLen/100)
     
   def HrzSpeed(self, val):
@@ -168,7 +225,7 @@ class Commands:
       Triggers built-in takeoff command.    
     '''
     print('TakeOff cmd')
-    self.flight.pub_takeoff.publish( Empty() )
+    self.pub_takeoff.publish( Empty() )
     
   def Land(self):
     '''
@@ -176,7 +233,7 @@ class Commands:
       Triggers built-in land command.    
     '''
     print('Land cmd')
-    self.flight.pub_land.publish( Empty() )
+    self.pub_land.publish( Empty() )
   
   def ToggleEmerg(self):
     '''
@@ -185,7 +242,7 @@ class Commands:
       rotors are stopped. Without emergency these LEDs show up green.
     '''
     print('Emegr cmd')
-    self.flight.pub_emergency.publish( Empty() )
+    self.pub_emergency.publish( Empty() )
     
   '''****************************************************************************************************
   *												Batch
@@ -239,7 +296,36 @@ class Commands:
     Parameter:
       tagNr (integer)
     '''
-    print('Face cmd' + ' __unimplemented')
+    print('Faceing "' + PATTERNS[tagNr] + '"')
+    while(1):
+      biggest = Tag()
+      for tag in self.tagMsg.tags:
+	if (tag.diameter > biggest.diameter):
+	  biggest = tag
+	  
+	if biggest.diameter == 0:
+	  # search
+	  self.aim['lx'] = 0
+	else:
+	  cx = 0; cy = 0
+	  for i in [0,2,4,6]:
+	    cx = cx + biggest.cwCorners[i]
+	    cy = cy + biggest.cwCorners[i+1]
+	  cx = cx / 4. / self.imgwidth
+	  cy = cy / 4. / self.imgheight
+	  
+	  # move foward and backward, trying to stop at stopping_dist
+	  stopping_dist = 2000.
+	  dist = (biggest.distance - stopping_dist) / stopping_dist
+	  if abs(dist) > 0.25:
+	    self.aim['lx'] = self.hrzSpeed
+	  else:
+	    self.aim['lx'] = 0
+	print(self.aim)
+	  
+    #for tag in self.tagMsg:
+      
+    
     
   def Release(self):
     '''

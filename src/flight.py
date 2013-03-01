@@ -353,9 +353,9 @@ class Flight(wx.Frame):
     #subscribers
     self.sub_joy = rospy.Subscriber( "joy", Joy, self.handle_joy )
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
-    self.sub_log = rospy.Subscriber( "yudrone/log", String, self.handle_log )
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags )
     self.sub_image = rospy.Subscriber(imageTopic, Image,self.handle_image)
+    self.sub_yaw = rospy.Subscriber( "/cmd_vel", Twist, self.handle_twist )
     rospy.sleep(0.1)
     
     #variables
@@ -365,7 +365,8 @@ class Flight(wx.Frame):
     self.OnRBInput()
     self.OnRBVideo()
     self.watchdog = rospy.Timer(rospy.Duration(1), self.__watchdog)
-    self.pub_log.publish('ROS initialized')
+    self.currYaw = Twist()
+    rospy.loginfo('ROS initialized')
     
   def openDriver(self):
     '''
@@ -430,17 +431,21 @@ class Flight(wx.Frame):
     if self.rbFront.GetValue() == True and self.camState == 'bottom':
       subprocess.call(["rosservice","call","/ardrone/togglecam"])
       self.camState = 'front'
-      self.pub_log.publish('Frontcam activated')
+      self.shell.updateResolution(360, 640) 
+      rospy.loginfo('Frontcam activated')
     if self.rbBottom.GetValue() == True and self.camState == 'front':
       subprocess.call(["rosservice","call","/ardrone/togglecam"])
       self.camState = 'bottom'
-      self.pub_log.publish('Bottomcam activated') 
+      self.shell.updateResolution(360, 640)
+      rospy.loginfo('Bottomcam activated')
+    
     
   '''************************************************************************************************************************
   DIAGNISTICS
   ************************************************************************************************************************'''  
   def setCommands(self, shell):
     self.shell = shell 
+    self.shell.updateResolution(360, 640) 
    
   def __watchdog(self, event = None):
     self.ardroneDriverRunnig = os.system('rosnode ping -c2 /ardrone_driver | grep "xmlrpc reply from" > /dev/null')
@@ -476,6 +481,7 @@ class Flight(wx.Frame):
       self.txtAltd.SetLabel('Altitude (mm):\t%d' %navdata.altd)
       self.txtRotation.SetLabel('Rotation:\t\t\tX:%d\tY:%d\tZ:%d' %(navdata.rotX, navdata.rotY, navdata.rotZ))
       self.txtMagnetometer.SetLabel('Magnetometer:\tX:%d\tY:%d\tZ:%d' %(navdata.magX, navdata.magY, navdata.magZ))
+      self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.1f\tLY:%.1f\tLZ:%.1f\tAZ:%.1f' %(self.currYaw.linear.x, self.currYaw.linear.y, self.currYaw.linear.z, self.currYaw.angular.z))
       self.droneState = navdata.state
       
       #wx.CallAfter(self.plotA.handle_xyz, {'x':navdata.rotX, 'y':navdata.rotY, 'z':navdata.rotZ})
@@ -489,7 +495,11 @@ class Flight(wx.Frame):
     wx.CallAfter(self.printNavdata, navdata)
     if self.shell != None:
       wx.CallAfter(shell.updateNav, navdata) # call asynchon
-      
+  
+  def handle_twist(self, yaw):
+    # just for data output
+    self.currYaw = yaw      
+  
   def print_tags(self, msg):
     if self.navdataCounter%10 == 0:
       nrOfTags = msg.tag_count
@@ -501,14 +511,7 @@ class Flight(wx.Frame):
   def handle_tags(self, msg):
     wx.CallAfter(self.print_tags, msg)
     if self.shell != None:
-      wx.CallAfter(shell.updateTag, msg) # call asynchon
-	
-  def handle_log(self, log):
-    '''
-    Callback function for "yudrone/log"
-    TODO: describe what it does
-    '''
-    rospy.loginfo(log.data)
+      wx.CallAfter(shell.updateTags, msg) # call asynchon
     
   '''************************************************************************************************************************
   INPUT
@@ -518,17 +521,21 @@ class Flight(wx.Frame):
     Callback function for changing input radiobuttons
     '''
     if self.rbJoypad.GetValue() == True:
-      self.pub_log.publish('Input set to joypad')
+      rospy.loginfo('Input set to joypad')
       self.rbFront.Enable()
       self.rbBottom.Enable()
       self.cmdShell.Disable()
       self.cmbCommands.Disable()
+      if not self.shell is None:
+	self.shell.updateNavSwitch(False)
     else:
-      self.pub_log.publish('Input set to console')
+      rospy.loginfo('Input set to console')
       self.rbFront.Disable()
       self.rbBottom.Disable()
       self.cmdShell.Enable()
       self.cmbCommands.Enable()
+      if not self.shell is None:
+	self.shell.updateNavSwitch(True)
       
   def handle_joy(self, joy):
     '''
@@ -537,25 +544,26 @@ class Flight(wx.Frame):
     
       # btn nr  for takeoff
     if joy.buttons[3]==1: # and self.rbJoypad.GetValue() == True:# and status["state"] == 'ground':
-      self.pub_log.publish('start command')
+      rospy.loginfo('start command')
       self.pub_takeoff.publish( Empty() )
       rospy.sleep(0.1)
     # btn nr  for land
     if joy.buttons[1]==1:# and self.rbJoypad.GetValue() == True:# and status["state"] == 'flight':
-      self.pub_log.publish('land command')
+      rospy.loginfo('land command')
       self.pub_land.publish( Empty() )
       rospy.sleep(0.1)
     # btn nr  for emergency
     if joy.buttons[0]==1:
       if self.droneState != 0:
-	self.pub_log.publish('emergency mode on')
+	rospy.loginfo('emergency mode on')
       else:
-	self.pub_log.publish('emergency mode off')
+	rospy.loginfo('emergency mode off')
       self.pub_emergency.publish( Empty() )
       rospy.sleep(0.1)
     # btn for stop
     if joy.buttons[2]==1:
       yaw = Twist()
+      rospy.loginfo('stop twist')
       self.pub_yaw.publish(yaw)
       
     # joysticks  
@@ -567,9 +575,6 @@ class Flight(wx.Frame):
       yaw.linear.z = joy.axes[3] * 2.0
       yaw.linear.x = joy.axes[1] * 1.0
       yaw.linear.y = joy.axes[0] * 1.0
-      
-      if self.navdataCounter%10 == 0:
-	self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.1f\tLY:%.1f\tLZ:%.1f\tAZ:%.1f' %(yaw.linear.x, yaw.linear.y, yaw.linear.z, yaw.angular.z))
 	
       # publish yaw to ardrone
       self.pub_yaw.publish(yaw)
