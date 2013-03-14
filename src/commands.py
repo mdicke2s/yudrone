@@ -15,6 +15,7 @@ import math
 roslib.load_manifest('yudrone')
 
 PATTERNS = {0:'4x4_45.patt', 1:'4x4_47.patt', 2:'4x4_91.patt', 3:'4x4_93.patt', 4:'patt.hiro'}
+SEARCH = {0:10, 1:-30, 2:60, 3:-100, 4:150, 5:-200, 6:360}
 NAVRATE = 10.0 #Hz
 
 class Commands:
@@ -23,47 +24,42 @@ class Commands:
   ****************************************************************************************************'''
   '''
   constructor
-  flight (optional parameter) is yudrone gui
+  (optional parameter) flight is yudrone gui
   '''
   def __init__(self, flight=None):
     if flight == None:
+      # this code applies for usage WITH gui
       rospy.init_node('yudrone_cmd')
       rospy.loginfo("init 'yudrone commands' using gui")
-      self.pub_land = rospy.Publisher( "ardrone/land", Empty )
-      self.pub_takeoff = rospy.Publisher( "ardrone/takeoff", Empty )
-      self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )
-      self.pub_yaw = rospy.Publisher( "/cmd_vel", Twist )
-      self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.updateNav )
-      self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )
-      #self.consoleTimer = rospy.Timer(rospy.Duration(0.5), self.__onCmdOut)
+      rospy.loginfo("make sure the following nodes are running: ardrone_driver, ar_pose")
+      
       self.updateNavSwitch(True)
       self.hasGui = False
     else:
+      # this code applies for usage WITHOUT gui
       rospy.loginfo("init 'yudrone commands' using gui")
-      self.pub_land = flight.pub_land
-      self.pub_takeoff = flight.pub_takeoff
-      self.pub_emergency = flight.pub_emergency
-      self.pub_yaw = flight.pub_yaw
       self.updateNavSwitch(False)
       self.hasGui = True
+
+    self.pub_land = rospy.Publisher( "ardrone/land", Empty )
+    self.pub_takeoff = rospy.Publisher( "ardrone/takeoff", Empty )
+    self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )
+    self.pub_yaw = rospy.Publisher( "/cmd_vel", Twist )
+    self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.updateNav )
+    self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )
+   
+    self.__facedTagNr = -1
+    self.__maxAltitude = 2000
+    self.__minAltitude = 100
+    self.__yawSpeed = 100
+    self.__hrzSpeed = 100
+    self.__searchState = 0
+    self.__aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
     
-    self.maxAltitude = 3000
-    self.minAltitude = 50
-    self.yawSpeed = 100
-    self.hrzSpeed = 100
-    self.aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
-    
+    self.__reset_Yaw(0.1)    
     self.navTimer = rospy.Timer(rospy.Duration(1.0/NAVRATE), self.__onNavigate)
     self.navdata = None
   
-  '''
-  this function is contigiously called by a timer  
-  rate = 2Hz
-  '''
-  def __onCmdOut(self, event = None):
-    if self.hasGui == False:
-      rospy.loginfo('Aim: ' + str(self.aim))
-
   '''
   this function is contigiously called by a timer  
   rate = NAVRATE
@@ -72,16 +68,16 @@ class Commands:
     if self.NavigateSwitch == True:
       # caculate values
       yaw = Twist()
-      yaw.angular.x = self.aim['ax']
-      yaw.angular.y = self.aim['ay']
-      yaw.angular.z = self.aim['az']
+      yaw.angular.x = self.__aim['ax']
+      yaw.angular.y = self.__aim['ay']
+      yaw.angular.z = self.__aim['az']
       # p-controller
       #if self.navdata.altd > 50:
-	#yaw.linear.z = (self.aim['lz'] - self.navdata.altd) /10
+	#yaw.linear.z = (self.__aim['lz'] - self.navdata.altd) /10
 	#rospy.loginfo('lz: ' + str(yaw.linear.z))
-      yaw.linear.z = self.aim['lz']
-      yaw.linear.x = self.aim['lx']
-      yaw.linear.y = self.aim['ly']
+      yaw.linear.z = self.__aim['lz']
+      yaw.linear.x = self.__aim['lx']
+      yaw.linear.y = self.__aim['ly']
 
       # publish yaw to ardrone
       self.pub_yaw.publish(yaw)
@@ -129,10 +125,43 @@ class Commands:
       delta [mm] (integer)
       positive means up 
     '''
-    print('Altitude set to ' + str(delta))
-    # set yaw parameter
-    self.aim['lz'] = delta
-    self.__reset_Yaw(math.fabs(delta)/200)
+    
+    # set designated altitude
+    self.__aimedAltd = self.navdata.altd + delta
+    if self.__aimedAltd < self.__minAltitude:
+      self.__aimedAltd = self.__minAltitude
+    elif self.__aimedAltd > self.__maxAltitude:
+      self.__aimedAltd = self.__maxAltitude
+    self.__altdDelta = delta
+    
+    # lift ardrone by until in range of designated altitude
+    self.__aim['lz'] = delta
+    reading1 = self.navdata.altd
+    rospy.loginfo('current altitude = %i \t aimed altitude = %i' %(reading1, self.__aimedAltd))    
+    
+    # stop callback
+    rospy.Timer(rospy.Duration(0.1), self.__altdStop, oneshot=True)
+  
+  '''
+  this function is a callback to stop altitude changing after the designated value was reached
+  '''
+  def __altdStop(self, event=None):
+    # get two altitude readings
+    reading1 = self.navdata.altd
+    rospy.sleep(0.1)
+    reading2 = self.navdata.altd
+    rospy.loginfo('altitude %i'%reading1)
+    
+    if ( (self.__altdDelta > 0 and reading1 > self.__aimedAltd) or # upwards
+	 (self.__altdDelta <= 0 and reading1 < self.__aimedAltd) or # downwards
+	  reading1 <= self.__minAltitude or # reached bottom
+	  reading1 >= self.__maxAltitude ): # reached top
+      #stop lifting
+      rospy.loginfo('reached altitude @ %i'%reading1)
+      self.__reset_Yaw(0)
+    else:
+      #call again
+      rospy.Timer(rospy.Duration(0.1), self.__altdStop, oneshot=True) 
     
   def MaxAlt(self, val):
     '''
@@ -143,7 +172,7 @@ class Commands:
       val [mm]
     '''
     print('MaxAlt set to ' + str(val))
-    self.maxAltitude = val
+    self.__maxAltitude = val
     
   def MinAlt(self, val):
     '''
@@ -154,7 +183,7 @@ class Commands:
       val [mm]
     '''
     print('MinAlt set to ' + str(val))
-    self.minAltitude = val
+    self.__minAltitude = val
     
   '''****************************************************************************************************
   *											basic navigation
@@ -163,12 +192,15 @@ class Commands:
     '''
     pushes a zero to yaw aim
     '''
-    rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
+    if delay == 0:
+      self.__onReset()
+    else:
+      self.__reset_Yaw_timer = rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
     
-  def __onReset(self, event):
-    self.aim['ax'] = self.aim['ay'] = self.aim['az'] = 0
-    self.aim['lz'] = self.aim['lx'] = self.aim['ly'] = 0
-    self.__onCmdOut()
+  def __onReset(self, event=None):
+    self.__aim['ax'] = self.__aim['ay'] = self.__aim['az'] = 0
+    self.__aim['lz'] = self.__aim['lx'] = self.__aim['ly'] = 0
+    rospy.loginfo('Aim=(0,0,0,0,0,0)')
   
   def Yaw(self, angle):
     '''
@@ -181,8 +213,7 @@ class Commands:
     '''
     print('Yaw ' + str(angle))
     # set yaw parameter
-    self.aim['az'] = angle/math.fabs(angle) * self.yawSpeed
-    self.__onCmdOut()
+    self.__aim['az'] = angle/math.fabs(angle) * self.__yawSpeed
     self.__reset_Yaw(math.fabs(angle)/100)
     
   def YawSpeed(self, val):
@@ -207,9 +238,9 @@ class Commands:
     # set yaw parameter
     vectLen = math.sqrt( x*x + y*y )
     rospy.loginfo('vectlen' + str( vectLen))
-    self.aim['lx'] = x/vectLen * self.hrzSpeed
-    self.aim['ly'] = y/vectLen * self.hrzSpeed
-    rospy.loginfo('lx: ' + str(self.aim['lx']))
+    self.__aim['lx'] = x/vectLen * self.__hrzSpeed
+    self.__aim['ly'] = y/vectLen * self.__hrzSpeed
+    rospy.loginfo('lx: ' + str(self.__aim['lx']))
     self.__reset_Yaw(vectLen/100)
     
   def HrzSpeed(self, val):
@@ -220,7 +251,7 @@ class Commands:
       1, 2, ..., 255
     '''
     print('HrzSpeed set to ' + str(val))
-    self.hrzSpeed = val
+    self.__hrzSpeed = val
     
   def TakeOff(self):
     '''
@@ -300,42 +331,70 @@ class Commands:
       tagNr (integer)
     '''
     print('Faceing "' + PATTERNS[tagNr] + '"')
-    while(1):
-      biggest = Tag()
-      for tag in self.tagMsg.tags:
-	if (tag.diameter > biggest.diameter):
-	  biggest = tag
-	  
-	if biggest.diameter == 0:
-	  # search
-	  self.aim['lx'] = 0
-	else:
-	  cx = 0; cy = 0
-	  for i in [0,2,4,6]:
-	    cx = cx + biggest.cwCorners[i]
-	    cy = cy + biggest.cwCorners[i+1]
-	  cx = cx / 4. / self.imgwidth
-	  cy = cy / 4. / self.imgheight
-	  
-	  # move foward and backward, trying to stop at stopping_dist
-	  stopping_dist = 2000.
-	  dist = (biggest.distance - stopping_dist) / stopping_dist
-	  if abs(dist) > 0.25:
-	    self.aim['lx'] = self.hrzSpeed
-	  else:
-	    self.aim['lx'] = 0
-	print(self.aim)
-	  
-    #for tag in self.tagMsg:
+    self.__facedTagNr = tagNr
+    self.__faceLostCounter = 0
+    # start facing
+    self.__onFace()
+  
+  def __onFace(self, event=None):              
+    # select tag
+    facedTag = Tag()
+    for tag in self.tagMsg.tags:
+      if (tag.id == self.__facedTagNr):
+	 facedTag = tag
+
+    if facedTag.diameter == 0:
+      # designated tag is not in range
+      self.__aim['az'] = 0	# stop
+      if self.__reset_Yaw_timer.isAlive():
+	  self.__reset_Yaw_timer.shutdown()
       
+      # start search
+      rospy.Timer(rospy.Duration(0.1), self.__onSearch, oneshot=True)
+      
+      self.__faceLostCounter += 1
+      if self.__faceLostCounter % 10 == 0:	# 1Hz
+	rospy.logwarn('tag not in range')
+      if self.__faceLostCounter > 200:		# after 20 seconds
+	rospy.logerr('tag is lost')
+	self.Release()
+	
+    else:
+      # face
+      if self.__faceLostCounter > 3: # got lost tag back
+	rospy.loginfo('tag in range')
+	self.__searchState = -1
+	self.__onSearch()	# will stop search. because stage=-1
+      self.__faceLostCounter = 0
+      
+      cx = 0; cy = 0
+      for i in [0,2,4,6]:
+	cx = cx + facedTag.cwCorners[i]
+	cy = cy + facedTag.cwCorners[i+1]
+      cx = cx / 4. / self.imgwidth
+      cy = cy / 4. / self.imgheight
+      
+      # rotate to face the tag
+      self.__aim['az'] = (-(cx - .5)/.5)
     
-    
+    # keep faceing
+    if self.__facedTagNr > -1:
+      rospy.Timer(rospy.Duration(0.1), self.__onFace, oneshot=True)      
+  
+  '''
+    Action:
+      stops faceing of tag (specified by Face(tagNr))
+    Parameter:
+      tagNr (integer)
+    '''
   def Release(self):
     '''
     Action:
       Releases facing tag specified by Face().
     '''
-    print('release cmd' + ' __unimplemented')
+    if self.__facedTagNr > -1:
+      print('released tag nr %i', self.__facedTagNr)
+      self.__facedTagNr = -1
     
   def Search(self, tagNr):
     '''
@@ -346,7 +405,27 @@ class Commands:
     Parameter:
       tagNr (integer)
     '''
-    print('Searching ' + str(tagNr) + ' __unimplemented')
+    print('Searching ' + str(tagNr))
+    self.__searchState = 0
+    # todo self.___searchTag???
+    rospy.Timer(rospy.Duration(0.1), self.__onSearch, oneshot=True)
+    
+  def __onSearch(self, event=None):
+    if self.__faceLostCounter < 3 or self.__searchState == -1:
+      self.__reset_Yaw(0) #cancel search
+      self.__searchState = 0 # reset search parameter
+    else:	# lost since 0.4s
+      # keep searching
+      if self.__aim['az'] == 0: # only if last yaw finished
+	rospy.loginfo('performing search stage %i'%self.__searchState)
+	if self.__reset_Yaw_timer.isAlive():
+	  self.__reset_Yaw_timer.shutdown()
+	self.Yaw(SEARCH[self.__searchState])
+	self.__searchState = (self.__searchState + 1) % 7
+	# call again
+	rospy.Timer(rospy.Duration(0.1), self.__onSearch, oneshot=True) # TODO TODO NEXT: figure out yaw length and use instead
+      
+      
     
   def Approach(self, tagNr):
     '''

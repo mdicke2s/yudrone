@@ -9,9 +9,7 @@ services are executed:
  * input control
 ***************************************************************************************************************************
 TODO
-* add watchdog **> http://www.ros.org/wiki/rospy/Overview/Time
-* ar_recog error
-* stage 4
+* add watchdog **> https://mediabox.grasp.upenn.edu/svn/penn-ros-pkgs/pr2_props_kinect_stack/trunk/props_openni_tracker/scripts/openni_watchdog.py
 ***************************************************************************************************************************
 Project:	yudrone
 Author:		Michael Dicke
@@ -39,7 +37,7 @@ from ardrone_autonomy.msg import Navdata
 from ar_recog.msg import Tags, Tag
 
 #local
-from commands import *
+import commands
 from singleton import SingletonType
 import plot
 
@@ -194,13 +192,13 @@ class Flight(wx.Frame):
     '''
     if self.droneState != 2 or self.droneState != 0:
       self.pub_emergency.publish( Empty() )
-    dlg = wx.MessageDialog(self, "Do you really want to close this application?", "Confirm Exit", wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
-    result = dlg.ShowModal()
-    dlg.Destroy()
-    if result == wx.ID_YES:
-      self.Destroy()
-      rospy.signal_shutdown('closing yudrone')
-      rospy.loginfo('Shutting down')
+    #dlg = wx.MessageDialog(self, "Do you really want to close this application?", "Confirm Exit", wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
+    #result = dlg.ShowModal()
+    #dlg.Destroy()
+    #if result == wx.ID_YES:
+    self.Destroy()
+    rospy.signal_shutdown('closing yudrone')
+    rospy.loginfo('Shutting down')
       
     
   '''************************************************************************************************************************
@@ -493,8 +491,6 @@ class Flight(wx.Frame):
   def handle_navdata(self, navdata):
     self.navdataCounter += 1
     wx.CallAfter(self.printNavdata, navdata)
-    if self.shell != None:
-      wx.CallAfter(shell.updateNav, navdata) # call asynchon
   
   def handle_twist(self, yaw):
     # just for data output
@@ -510,8 +506,6 @@ class Flight(wx.Frame):
       
   def handle_tags(self, msg):
     wx.CallAfter(self.print_tags, msg)
-    if self.shell != None:
-      wx.CallAfter(shell.updateTags, msg) # call asynchon
     
   '''************************************************************************************************************************
   INPUT
@@ -589,6 +583,11 @@ class Flight(wx.Frame):
     self.cmdShell.write("shell." + self.CommandList[item])
     self.cmdShell.autoCallTipShow("shell." + self.CommandList[item])
     
+def reloadCommands():
+  #reloads command file
+  reload(commands)
+  shell = commands.Commands(flight)
+  flight.setCommands(shell)
   
 '''************************************************************************************************************************
 top-level-code
@@ -599,7 +598,7 @@ if __name__ == '__main__':
     # start application
     app = wx.App(redirect=False)
     flight = Flight()
-    shell = Commands(flight)
+    shell = commands.Commands(flight)
     flight.setCommands(shell)
     flight.Show(True)
     app.MainLoop()
@@ -610,6 +609,7 @@ if __name__ == '__main__':
     #if droneState != 2 or droneState != 0:
     #  param=" pub /ardrone/reset std_msgs/Empty --once"
     #  subprocess.Popen(['/opt/ros/fuerte/bin/rostopic', param])
+    # todo stop drone
     print 'Exception occured'
     for line in sys.exc_info():
       print(line)
