@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 '''***********************************************************************************************
 This node provides abstracted access to ardrone quadrotor
 Basically it encapsulates all communication to control the vehicles 3d-motion:
@@ -13,14 +15,16 @@ Repository: https://github.com/mdicke2s/yudrone
 from geometry_msgs.msg import Twist
 import rospy
 import math
+import roslib;
 roslib.load_manifest('yudrone')
+from ardrone_autonomy.msg import Navdata
 
 NAVRATE = 10.0 #Hz
 
 class yudrone_delegate:
-'''****************************************************************************************************
-* administrative methods
-****************************************************************************************************'''
+  '''****************************************************************************************************
+  * administrative methods
+  ****************************************************************************************************'''
   
   def __init__(self):
     '''
@@ -39,7 +43,7 @@ class yudrone_delegate:
     self.__hrzSpeed = 100
     self.__aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
     
-	self.__reset_aim(0.1)
+    self.__reset_aim(0.1)
     self.navTimer = rospy.Timer(rospy.Duration(1.0/NAVRATE), self.__onNavigate)
     self.__navdata = None
   
@@ -50,7 +54,7 @@ class yudrone_delegate:
     '''
     if self.NavigateSwitch == True:
       # assemble twist message
-	  twist = Twist()
+      twist = Twist()
       twist.angular.x = self.__aim['ax']
       twist.angular.y = self.__aim['ay']
       twist.angular.z = self.__aim['az']
@@ -58,7 +62,7 @@ class yudrone_delegate:
       twist.linear.x = self.__aim['lx']
       twist.linear.y = self.__aim['ly']
   
-  	  # publish twist to ardrone
+      # publish twist to ardrone
       self.pub_twist.publish(twist)
   
   def updateNav(self, navdata):
@@ -78,9 +82,9 @@ class yudrone_delegate:
       rospy.loginfo('delegate driven navigation DISABLED')
     
     
-'''****************************************************************************************************
-* tresholds
-****************************************************************************************************'''
+  '''****************************************************************************************************
+  * tresholds
+  ****************************************************************************************************'''
 	
   def Altitude(self, delta):
     '''
@@ -151,19 +155,21 @@ class yudrone_delegate:
     print('MinAlt set to ' + str(val))
     self.__minAltitude = val
       
-'''****************************************************************************************************
-* navigation
-****************************************************************************************************'''
+  '''****************************************************************************************************
+  * navigation
+  ****************************************************************************************************'''
   def __reset_aim(self, delay = 0):
     '''
     pushes a zero to aim
     '''
-    rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
+    if delay == 0:
+      self.__onReset()
+    else:
+      rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
       
-  def __onReset(self, event):
+  def __onReset(self, event = None):
     self.__aim['ax'] = self.__aim['ay'] = self.__aim['az'] = 0
     self.__aim['lz'] = self.__aim['lx'] = self.__aim['ly'] = 0
-    self.__onCmdOut()
   
   def Yaw(self, angle):
     '''
