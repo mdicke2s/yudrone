@@ -62,7 +62,9 @@ int32 yawSpeed
 bool hasHrzSpeed
 int32 hrzSpeed
 
+# __unlock(self) *************************************************************
+bool forceUnlock
+
 # not implemented by now...
 # TakeOff(self): Land(self): ToggleEmerg(self) *******************************
 # __reset_twist(self, delay = 0) *********************************************
-

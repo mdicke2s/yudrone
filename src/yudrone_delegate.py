@@ -12,12 +12,17 @@ Author: Michael Dicke
 Repository: https://github.com/mdicke2s/yudrone
 ***********************************************************************************************'''
 
-from geometry_msgs.msg import Twist
-import rospy
-import math
-import roslib;
-roslib.load_manifest('yudrone')
-from ardrone_autonomy.msg import Navdata
+
+# OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE 
+# OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE # OBSOLETE 
+
+
+#from geometry_msgs.msg import Twist
+#import rospy
+#import math
+#import roslib;
+#roslib.load_manifest('yudrone')
+#from ardrone_autonomy.msg import Navdata
 
 NAVRATE = 10.0 #Hz
 

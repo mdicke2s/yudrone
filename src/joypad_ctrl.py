@@ -47,7 +47,7 @@ class joypad_ctrl():
     else:
       rospy.loginfo('joynode is running')
     
-    rospy.init_node('joypad_ctrl')
+    rospy.init_node('yudrone_joy')
     self.lock = False
     
     #publishers

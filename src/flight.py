@@ -313,25 +313,25 @@ class Flight(wx.Frame):
     else:
       rospy.loginfo('joynode is running')
     
-    # check joypad_ctrl
-    joypadCtrlRunning = os.system('rosnode list | grep /joypad_ctrl > /dev/null')
+    # check yudrone_joy
+    joypadCtrlRunning = os.system('rosnode list | grep /yudrone_joy > /dev/null')
     if joypadCtrlRunning != 0:
       # no joy_node
       dlg = wx.MessageDialog(self,
-        "joypad_ctrl is not running. Should it be executed by yudrone?",
-        "joypad_ctrl is not running!", wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
+        "yudrone_joy is not running. Should it be executed by yudrone?",
+        "yudrone_joy is not running!", wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
       result = dlg.ShowModal()
       dlg.Destroy()
       if result == wx.ID_YES:
         # open joy_node as subprocess
         self.openJoyCtrl()
     
-    # check joypad_ctrl again
-    joypadCtrlRunning = os.system('rosnode list | grep /joypad_ctrl > /dev/null')
+    # check yudrone_joy again
+    joypadCtrlRunning = os.system('rosnode list | grep /yudrone_joy > /dev/null')
     if joypadCtrlRunning != 0:
-      rospy.logerr('joypad_ctrl is not running')
+      rospy.logerr('yudrone_joy is not running')
     else:
-      rospy.loginfo('joypad_ctrl is running')
+      rospy.loginfo('yudrone_joy is running')
     
     # .............................................................................
     rospy.loginfo('stage 5: check ar_toolkit ....') 
@@ -364,14 +364,14 @@ class Flight(wx.Frame):
     rospy.init_node('yudrone_flight')
     
     #publishers
-    self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )
-    self.pub_lock = rospy.Publisher( "/yudrone/lock_joypad", Bool )
+    self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )		# toggle ardrone emergency state
+    self.pub_lockJoy = rospy.Publisher( "/yudrone/lock_joypad", Bool )	# lock axis of joypad
     
     #subscribers
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
-    self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags ) # only for screen output
-    self.sub_image = rospy.Subscriber(imageTopic, Image,self.handle_image)
-    self.sub_yaw = rospy.Subscriber( "/cmd_vel", Twist, self.handle_twist ) # only for screen output
+    self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags )	# obtain tags (only for screen output)
+    self.sub_image = rospy.Subscriber(imageTopic, Image,self.handle_image)	# subscribe to video from yudrone/artoolkit
+    self.sub_yaw = rospy.Subscriber( "/cmd_vel", Twist, self.handle_twist )	# obtain twist msgs (only for screen output)
     rospy.sleep(0.1)
     
     #variables
@@ -413,9 +413,9 @@ class Flight(wx.Frame):
     
   def openJoyCtrl(self):
     '''
-    opens joypad_ctrl in a subprocess
+    opens yudrone_joy in a subprocess
     '''
-    rospy.loginfo('open joypad_ctrl...')
+    rospy.loginfo('open yudrone_joy...')
     cmd=self.__ROSDIR + "rosrun yudrone joypad_ctrl.py"
     self.pipe_joy=subprocess.Popen(['gnome-terminal', '--command='+cmd])
     rospy.sleep(3)
@@ -547,7 +547,7 @@ class Flight(wx.Frame):
       self.rbBottom.Enable()
       self.cmdShell.Disable()
       self.cmbCommands.Disable()
-      self.pub_lock.publish(False)
+      self.pub_lockJoy.publish(False)
       if not self.shell is None:
         self.shell.updateNavSwitch(False)
     else:
@@ -556,7 +556,7 @@ class Flight(wx.Frame):
       self.rbBottom.Disable()
       self.cmdShell.Enable()
       self.cmbCommands.Enable()
-      self.pub_lock.publish(True)
+      self.pub_lockJoy.publish(True)
       if not self.shell is None:
         self.shell.updateNavSwitch(True)
     

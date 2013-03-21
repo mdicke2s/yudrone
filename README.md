@@ -7,29 +7,36 @@ Ardrone 2.0 Navigation with ROS:
 * Vision, Graphics, and Robotics Laboratory (http://vgrserver.cse.yorku.ca)
 
 Status:
-* early development
+* in development
 
 Objectives:
 * autonomous navigation
 * Point-to-point based tasks
 * augmented reality based tasks
 
-Interface:
-```sh
-sdfsfd
-```
+Nodes:
+* flight.py ("yudrone_flight", GUI and command line interface)
+* joypad_ctrl.py ("yudrone_joy", control ardrone with ps3-like joypad)
+** left joystick (horizontal movements)
+** right joystick (altitude and yaw)
+** buttons (takeoff, land, emergency, stop_twist)
+* commands.py ("yudrone_cmd", offers different naviagtion commands)
+* setDefaultParameter.py ("yudrone_param", sets environment using rosparam)
+
+Topics:
+* "yudrone/commands", commandsMsg, yudrone_cmd listenes command messages
+* "yudrone/lock_cmd", Int32, yudrone_cmd reports lock (if -1 it is blocked for incomming commands)
+* "yudrone/lock_joypad", Bool, is used to lock joysticks during task performance
+
+For more information on the software read file and function headers.
 
 Hints:
 ```sh
-#ros
 
-
-#ardrone
-roscore
+#ardrone_autonomy cli
 rosrun ardrone_autonomy ardrone_driver [-ip x.x.x.x]
 
-
-#git
+#git cli
 git add * [or <file>]
 git commit -m "message"
 git push origin master
