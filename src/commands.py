@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 '''***********************************************************************************************
 This file contains all commands used from the command line interface.
 A python console is embedded in the yudrone gui, that performs these commands.
@@ -18,15 +20,15 @@ Author:		Michael Dicke
 Repository:	https://github.com/mdicke2s/yudrone
 ***********************************************************************************************'''
 
+import rospy
+import roslib;
+roslib.load_manifest('yudrone')
 from flight import *
 from ar_recog.msg import Tags, Tag
 from geometry_msgs.msg import Twist
 from yudrone.msg import commandsMsg
 from std_msgs.msg import Int32
-import rospy
 import math
-roslib.load_manifest('yudrone')
-
 
 PATTERNS = {0:'4x4_45.patt', 1:'4x4_47.patt', 2:'4x4_91.patt', 3:'4x4_93.patt', 4:'patt.hiro'}
 SEARCH = {0:10, 1:-30, 2:60, 3:-100, 4:150, 5:-200, 6:360}
@@ -49,6 +51,8 @@ class Commands:
     self.__hrzSpeed = 100
     self.__searchState = 0
     self.__lockNr = -1
+    self.imgheight = 360
+    self.imgwidth = 640
     self.__aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
     
     self.pub_land = rospy.Publisher( "ardrone/land", Empty )		# ardrone land command
@@ -514,17 +518,15 @@ class Commands:
       
       # move to certain distance of tag
       if self.__faceDist == True:
-        deltaDist = facedTag.distance - 1200;	# designated to be 1.2 m from target
-      if abs(deltaDist) > 50:
-        self.__aim['lx'] = 0.05 * deltaDist/abs(deltaDist)
-        if abs(deltaDist) > 300:
-          self.__aim['lx'] = 0.1 * deltaDist/abs(deltaDist)
-      else:
-        self.__aim['lx'] = 0
+        deltaDist = facedTag.distance - 1500;	# designated to be 1.5 m from target
+	if abs(deltaDist) > 100:
+	  self.__aim['lx'] = 0.0001 * deltaDist
+	else:
+	  self.__aim['lx'] = 0
       
       # move perpendicular to tag
       if self.__facePerpend == True:
-        self.__aim['ly'] = 0.25 * facedTag.yRot
+        self.__aim['ly'] = 0.15 * facedTag.yRot
       
     
     # keep faceing
