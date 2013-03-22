@@ -515,19 +515,20 @@ class Commands:
       # elevate to face tag
       if self.__faceAlt == True:
         self.__aim['lz'] = (-(cy - .5)/.5)
+        
+      # move perpendicular to tag
+      if self.__facePerpend == True:
+        self.__aim['ly'] = 0.25 * facedTag.yRot
+      else:
+        self.__aim['ly'] = 0.0
       
       # move to certain distance of tag
       if self.__faceDist == True:
-        deltaDist = facedTag.distance - 1500;	# designated to be 1.5 m from target
+        deltaDist = facedTag.distance - 1800;	# designated to be 1.8 m from target
 	if abs(deltaDist) > 100:
 	  self.__aim['lx'] = 0.0001 * deltaDist
 	else:
 	  self.__aim['lx'] = 0
-      
-      # move perpendicular to tag
-      if self.__facePerpend == True:
-        self.__aim['ly'] = 0.15 * facedTag.yRot
-      
     
     # keep faceing
     if self.__facedTagNr > -1:
