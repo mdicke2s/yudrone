@@ -11,6 +11,7 @@ services are executed:
 ***************************************************************************************************************************
 TODO
 * add watchdog **> https://mediabox.grasp.upenn.edu/svn/penn-ros-pkgs/pr2_props_kinect_stack/trunk/props_openni_tracker/scripts/openni_watchdog.py
+* note camera may stop --> watchdog on all incomming topics
 ***************************************************************************************************************************
 Project:	yudrone
 Author:		Michael Dicke
@@ -96,9 +97,11 @@ class Flight(wx.Frame):
     
     self.rbFront = wx.RadioButton(self, 0, 'front-camera', style=wx.RB_GROUP)
     self.rbBottom = wx.RadioButton(self, 0, 'bottom-camera')
+    self.rbOff = wx.RadioButton(self, 0, 'off')
     self.rbFront.Bind(wx.EVT_RADIOBUTTON, self.OnRBVideo)
     self.rbBottom.Bind(wx.EVT_RADIOBUTTON, self.OnRBVideo) 
-    self.rbFront.SetValue(True)
+    self.rbOff.Bind(wx.EVT_RADIOBUTTON, self.OnRBVideo)
+    self.rbOff.SetValue(True)
     
     self.rbJoypad = wx.RadioButton(self, 0, 'joypad-only', style=wx.RB_GROUP)
     self.rbConsole = wx.RadioButton(self, 0, 'console')
@@ -118,6 +121,7 @@ class Flight(wx.Frame):
     #assemble left
     sizeRadioBtn1.Add(self.rbFront, 0, wx.ALL, 0)
     sizeRadioBtn1.Add(self.rbBottom, 0, wx.ALL, 0)
+    sizeRadioBtn1.Add(self.rbOff, 0, wx.ALL, 0)
     sizeRadioBtn2.Add(self.rbJoypad, 0, wx.ALL, 0)
     sizeRadioBtn2.Add(self.rbConsole, 0, wx.ALL, 0)
     
@@ -200,6 +204,8 @@ class Flight(wx.Frame):
     #dlg.Destroy()
     #if result == wx.ID_YES:
     self.Destroy()
+    if self.camState == 'bottom':
+      subprocess.call(["rosservice","call","/ardrone/togglecam"])
     rospy.signal_shutdown('closing yudrone')
     rospy.loginfo('Shutting down')
       
@@ -352,10 +358,10 @@ class Flight(wx.Frame):
     arNodeRunning = os.system('rostopic list | grep /ar/image > /dev/null')
     if arNodeRunning != 0:
       rospy.logerr('ar_node is not running')
-      imageTopic = '/ardrone/image_raw'
+      self.__imageTopic = '/ardrone/image_raw'
     else:
       rospy.loginfo('ar_node is running')
-      imageTopic = '/ar/image'
+      self.__imageTopic = '/ar/image'
     
     # .............................................................................
     rospy.loginfo('stage 6: init own node ...') 
@@ -370,12 +376,12 @@ class Flight(wx.Frame):
     #subscribers
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags )	# obtain tags (only for screen output)
-    self.sub_image = rospy.Subscriber(imageTopic, Image,self.handle_image)	# subscribe to video from yudrone/artoolkit
     self.sub_yaw = rospy.Subscriber( "/cmd_vel", Twist, self.handle_twist )	# obtain twist msgs (only for screen output)
+    self.sub_image = None
     rospy.sleep(0.1)
     
     #variables
-    self.camState='front'
+    self.camState='front' # initially the camera is set to front on ardrone
     
     #stage 7: finalize ............................................
     self.OnRBInput()
@@ -398,7 +404,7 @@ class Flight(wx.Frame):
     opens ardrone_driver in a subprocess
     '''
     rospy.loginfo('open roscore...')
-    cmd=self.__ROSDIR + "roscore"
+    cmd="/opt/ros/fuerte/bin/roscore"
     self.pipe_ros=subprocess.Popen(['gnome-terminal', '--command='+cmd])
     rospy.sleep(3)
     
@@ -444,7 +450,6 @@ class Flight(wx.Frame):
     '''
     Callback function for incomming video frames
     '''
-    #rospy.loginfo('updateimage')
     img = wx.ImageFromData(data.width, data.height, data.data)
     bitmap = wx.BitmapFromImage(img)
     self.imageView.SetBitmap(bitmap)
@@ -453,6 +458,12 @@ class Flight(wx.Frame):
     '''
     Callback function for changing video radiobuttons
     '''
+    # unregister
+    if self.sub_image != None:
+      self.sub_image.unregister()
+      self.sub_image = None
+    
+    # set values for resolution and camState
     if self.rbFront.GetValue() == True and self.camState == 'bottom':
       subprocess.call(["rosservice","call","/ardrone/togglecam"])
       self.camState = 'front'
@@ -463,6 +474,13 @@ class Flight(wx.Frame):
       self.camState = 'bottom'
       self.shell.updateResolution(360, 640)
       rospy.loginfo('Bottomcam activated')
+      
+    # on or off
+    if self.rbOff.GetValue() == True:
+      rospy.loginfo('Camera deactivated')
+    else:
+      self.sub_image = rospy.Subscriber(self.__imageTopic, Image,self.handle_image)
+    
     
   '''************************************************************************************************************************
   DIAGNISTICS
@@ -529,7 +547,7 @@ class Flight(wx.Frame):
       string = ""
       for tag in msg.tags:
         string += "[%d] X:%d  Y:%d  D:%d\t" %(tag.id, tag.x, tag.y, tag.distance)
-        self.txtTags.SetLabel('Tags:\t\t\t' + string)
+      self.txtTags.SetLabel('Tags:\t\t\t' + string)
       
   def handle_tags(self, msg):
     wx.CallAfter(self.print_tags, msg)
@@ -545,6 +563,7 @@ class Flight(wx.Frame):
       rospy.loginfo('Input set to joypad')
       self.rbFront.Enable()
       self.rbBottom.Enable()
+      self.rbOff.Enable()
       self.cmdShell.Disable()
       self.cmbCommands.Disable()
       self.pub_lockJoy.publish(False)
@@ -554,6 +573,7 @@ class Flight(wx.Frame):
       rospy.loginfo('Input set to console')
       self.rbFront.Disable()
       self.rbBottom.Disable()
+      self.rbOff.Disable()
       self.cmdShell.Enable()
       self.cmbCommands.Enable()
       self.pub_lockJoy.publish(True)

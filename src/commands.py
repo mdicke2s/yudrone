@@ -31,8 +31,12 @@ from std_msgs.msg import Int32
 import math
 
 PATTERNS = {0:'4x4_45.patt', 1:'4x4_47.patt', 2:'4x4_91.patt', 3:'4x4_93.patt', 4:'patt.hiro'}
+FACESTATES = {0:'YAW', 1:'ALTD', 2:'PERPEND', 3:'DIST'}
 SEARCH = {0:10, 1:-30, 2:60, 3:-100, 4:150, 5:-200, 6:360}
 NAVRATE = 10.0 #Hz
+CONTROLLRATE = 10.0 #Hz
+FACEDIST = 1600 # designated to be 1.6 m far from target
+#STATEDURATION = 0.5 # change faceState after 0.5 second
 
 class Commands:
   '''****************************************************************************************************
@@ -244,7 +248,7 @@ class Commands:
       rospy.loginfo('current altitude = %i \t aimed altitude = %i' %(reading1, self.__aimedAltd))    
       
       # stop callback
-      rospy.Timer(rospy.Duration(0.1), self.__altdStop, oneshot=True)
+      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__altdStop, oneshot=True)
   
   '''
   this function is a callback to stop altitude changing after the designated value was reached
@@ -266,7 +270,7 @@ class Commands:
       self.__unLock()
     else:
       #call again
-      rospy.Timer(rospy.Duration(0.1), self.__altdStop, oneshot=True) 
+      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__altdStop, oneshot=True) 
     
   def MaxAltd(self, val):
     '''
@@ -464,6 +468,8 @@ class Commands:
       self.__facePerpend = facePerpend
       self.__faceDist = faceDist
       self.__faceAlt = faceAlt
+      self.__faceState = 0 # do one step at a time
+      self.__faceStateCounter = 0
       
       # start facing
       self.__onFace()
@@ -484,21 +490,24 @@ class Commands:
       
       # start search
       if self.__faceKeepSearching == True:
-        rospy.Timer(rospy.Duration(0.1), self.__onSearch, oneshot=True)
+        rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
       
       self.__faceLostCounter += 1
-      if self.__faceLostCounter % 10 == 0:	# 1Hz
+      if self.__faceLostCounter % int(CONTROLLRATE) == 0:	# 1Hz
         rospy.logwarn('tag not in range')
-      if self.__faceLostCounter > 200:		# after 20 seconds
+      if self.__faceLostCounter > CONTROLLRATE*20:	# after 20 seconds
         rospy.logerr('tag is lost')
         self.Release()
     
-    else:
+    else: # designated tag is in range
       # face
       if self.__faceLostCounter > 3: # got lost tag back
         rospy.loginfo('tag in range')
         self.__searchState = -1# reset search state
+        self.__faceState = 0   # reset face state
+        self.__faceStateCounter = 0
         self.__onSearch()	# will stop search. because stage=-1
+        rospy.loginfo('Face-state = ' + FACESTATES[self.__faceState])
       self.__faceLostCounter = 0
       
       cx = 0; cy = 0
@@ -509,30 +518,48 @@ class Commands:
       cy = cy / 4. / self.imgheight
       
       # rotate to face the tag
-      if self.__faceYaw == True:
+      if self.__faceYaw == True and self.__faceState == 0:
         self.__aim['az'] = (-(cx - .5)/.5)
-      
-      # elevate to face tag
-      if self.__faceAlt == True:
-        self.__aim['lz'] = (-(cy - .5)/.5)
         
+      # elevate to face tag
+      if self.__faceAlt == True and self.__faceState == 1:
+        self.__aim['lz'] = (-(cy - .5)/.5)
+                
       # move perpendicular to tag
-      if self.__facePerpend == True:
-        self.__aim['ly'] = 0.25 * facedTag.yRot
+      if self.__facePerpend == True and self.__faceState == 2:
+        self.__aim['ly'] = 0.25 * facedTag.yRot  
       else:
         self.__aim['ly'] = 0.0
       
       # move to certain distance of tag
-      if self.__faceDist == True:
-        deltaDist = facedTag.distance - 1800;	# designated to be 1.8 m from target
-	if abs(deltaDist) > 100:
-	  self.__aim['lx'] = 0.0001 * deltaDist
-	else:
-	  self.__aim['lx'] = 0
+      if self.__faceDist == True and self.__faceState == 3:
+        deltaDist = facedTag.distance - FACEDIST
+        if abs(deltaDist) > 100:
+          self.__aim['lx'] = 0.0001 * deltaDist
+        else:
+          self.__aim['lx'] = 0
+          
+      # update facing state
+      self.__faceStateCounter = self.__faceStateCounter + 1
+      if  abs(self.__aim['az']) < 0.02 and self.__faceState == 0 or \
+	  abs(self.__aim['lz']) < 0.02 and self.__faceState == 1 or \
+	  abs(self.__aim['ly']) < 0.02 and self.__faceState == 2 or \
+	  abs(self.__aim['lx']) < 0.02 and self.__faceState == 3 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*0.5) and self.__faceState == 0 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*0.5) and self.__faceState == 1 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*1.5) and self.__faceState == 2 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*1.0) and self.__faceState == 3:
+	# eiter if one of the states is done, or if too long in one state
+	self.__faceState = (self.__faceState+1) % 4
+	rospy.loginfo('Face-state = ' + FACESTATES[self.__faceState])
+	self.__faceStateCounter = 0
+	self.__onReset(None, True) # stop moving (silent)
+	
     
     # keep faceing
     if self.__facedTagNr > -1:
-      rospy.Timer(rospy.Duration(0.1), self.__onFace, oneshot=True)      
+      # call again
+      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onFace, oneshot=True)      
   
   
   def Release(self):
@@ -565,7 +592,7 @@ class Commands:
       print('Searching ' + str(tagNr))
       self.__searchState = 0
       # todo self.___searchTag???
-      rospy.Timer(rospy.Duration(0.1), self.__onSearch, oneshot=True)
+      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
     
   def __onSearch(self, event=None):
     if self.__faceLostCounter < 3 or self.__searchState == -1:
