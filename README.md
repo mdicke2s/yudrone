@@ -28,6 +28,11 @@ Topics:
 * "yudrone/lock_cmd", Int32, yudrone_cmd reports lock (if -1 it is blocked for incomming commands)
 * "yudrone/lock_joypad", Bool, is used to lock joysticks during task performance
 
+To install yudrone:
+* make all dependent packages
+* copy add_to_ar_recog_bin.zip into .../ar_recog/bin
+* modify setDefaultParameter.py
+
 For more information on the software read file and function headers.
 
 TODOs before field trials
@@ -40,9 +45,6 @@ TODOs before field trials
 
 Hints:
 ```sh
-# to install yudrone make all dependent packages
-# and copy add_to_ar_recog_bin.zip into .../ar_recog/bin
-
 #ardrone_autonomy cli
 rosrun ardrone_autonomy ardrone_driver [-ip x.x.x.x]
 
