@@ -8,10 +8,12 @@ services are executed:
  * joypad_ctrl
  * diagnosis
  * command based control
+ * watchdog
+CommandLine Args:
+ * plot --> plots magnetometer and rotation on GUI
 ***************************************************************************************************************************
 TODO
-* add watchdog **> https://mediabox.grasp.upenn.edu/svn/penn-ros-pkgs/pr2_props_kinect_stack/trunk/props_openni_tracker/scripts/openni_watchdog.py
-* note camera may stop --> watchdog on all incomming topics
+* 
 ***************************************************************************************************************************
 Project:	yudrone
 Author:		Michael Dicke
@@ -136,15 +138,6 @@ class Flight(wx.Frame):
     
     # stage 3: right widgets .......................................
     #create right
-    self.txtConnection = wx.StaticText(self) #spacer
-    self.txtBattery = wx.StaticText(self)
-    self.txtState = wx.StaticText(self)
-    self.txtAltd = wx.StaticText(self)
-    
-    self.txtRotation = wx.StaticText(self)
-    self.txtMagnetometer = wx.StaticText(self)
-    self.txtAim = wx.StaticText(self)
-    self.txtTags = wx.StaticText(self)
     if self.__plotRot == True:
       self.txtPlotA= wx.StaticText(self) # graph text
       self.plotA = plot.GraphPanel(self) # graph
@@ -153,6 +146,16 @@ class Flight(wx.Frame):
       self.txtPlotB= wx.StaticText(self) # graph text
       self.plotB = plot.GraphPanel(self) # graph
       self.txtPlotB.SetLabel('Magnetometer-Graph XYZ (rgb) ')
+    
+    self.txtConnection = wx.StaticText(self)
+    self.txtBattery = wx.StaticText(self)
+    self.txtState = wx.StaticText(self)
+    self.txtAltd = wx.StaticText(self)
+    
+    self.txtRotation = wx.StaticText(self)
+    self.txtMagnetometer = wx.StaticText(self)
+    self.txtAim = wx.StaticText(self)
+    self.txtTags = wx.StaticText(self)
     
     self.txtConnection.SetLabel('Connection:\t\tNONE')
     self.txtBattery.SetLabel('Battery:\t\t\tUNKNOWN')
@@ -165,7 +168,13 @@ class Flight(wx.Frame):
     self.txtTags.SetLabel('Tags: ')
     
     #assemble right
-    sizeRight.Add(wx.StaticText(self), 0, wx.ALL, 5)
+    sizeRight.Add(wx.StaticText(self), 0, wx.ALL, 5)#spacer
+    if self.__plotRot == True:
+      sizeRight.Add(self.txtPlotA, 0, wx.EXPAND, 5)
+      sizeRight.Add(self.plotA, 0, wx.EXPAND, 5)
+    if self.__plotMag == True:
+      sizeRight.Add(self.txtPlotB, 0, wx.EXPAND, 5)
+      sizeRight.Add(self.plotB, 0, wx.EXPAND, 5)
     sizeRight.Add(self.txtConnection, 0, wx.ALL, 5)
     sizeRight.Add(self.txtBattery, 0, wx.ALL, 5)
     sizeRight.Add(self.txtState, 0, wx.ALL, 5)
@@ -174,12 +183,6 @@ class Flight(wx.Frame):
     sizeRight.Add(self.txtMagnetometer, 0, wx.ALL, 5)
     sizeRight.Add(self.txtAim, 0, wx.ALL, 5)
     sizeRight.Add(self.txtTags, 0, wx.ALL, 5)
-    if self.__plotRot == True:
-      sizeRight.Add(self.txtPlotA, 0, wx.EXPAND, 5)
-      sizeRight.Add(self.plotA, 0, wx.EXPAND, 5)
-    if self.__plotMag == True:
-      sizeRight.Add(self.txtPlotB, 0, wx.EXPAND, 5)
-      sizeRight.Add(self.plotB, 0, wx.EXPAND, 5)
     
     # stage 4: finalize ............................................
     #finalize
@@ -364,7 +367,29 @@ class Flight(wx.Frame):
       self.__imageTopic = '/ar/image'
     
     # .............................................................................
-    rospy.loginfo('stage 6: init own node ...') 
+    rospy.loginfo('stage 6: check watchdog ....') 
+    # .............................................................................
+    wdNodeRunning = os.system('rosnode list | grep /yudrone_watchdog > /dev/null')
+    if wdNodeRunning != 0:
+      # no watchdog
+      dlg = wx.MessageDialog(self,
+        "Watchdog is not running. Should it be executed by yudrone?",
+        "Watchdog is not running!", wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
+      result = dlg.ShowModal()
+      dlg.Destroy()
+      if result == wx.ID_YES:
+	# open watchdog as subprocess
+	self.openWatchdog()
+    
+    # check ar_node again
+    wdNodeRunning = os.system('rostopic list | grep /ar/image > /dev/null')
+    if wdNodeRunning != 0:
+      rospy.logerr('watchdog is not running')
+    else:
+      rospy.loginfo('watchdog is running')
+    
+    # .............................................................................
+    rospy.loginfo('stage 7: init own node ...') 
     # .............................................................................
     #create node
     rospy.init_node('yudrone_flight')
@@ -386,7 +411,6 @@ class Flight(wx.Frame):
     #stage 7: finalize ............................................
     self.OnRBInput()
     self.OnRBVideo()
-    self.watchdog = rospy.Timer(rospy.Duration(1), self.__watchdog)
     self.currYaw = Twist()
     rospy.loginfo('ROS initialized')
     
@@ -435,6 +459,15 @@ class Flight(wx.Frame):
     rospy.set_param('aov', 0.67)
     cmd=self.__ROSDIR + "rosrun ar_recog ar_recog image:=/ardrone/image_raw"
     self.pipe_ar=subprocess.Popen(['gnome-terminal', '--command='+cmd, '--working-directory=' + ARRECOGDIR])
+    rospy.sleep(1)
+    
+  def openWatchdog(self):
+    '''
+    opens watchdog in a subprocess
+    '''
+    rospy.loginfo('open watchdog...')
+    cmd=self.__ROSDIR + "rosrun yudrone watchdog.py"
+    self.pipe_ar=subprocess.Popen(['gnome-terminal', '--command='+cmd])
     rospy.sleep(1)
     
   '''************************************************************************************************************************
@@ -488,10 +521,7 @@ class Flight(wx.Frame):
   def setCommands(self, shell):
     self.shell = shell 
     self.shell.updateResolution(360, 640) 
-   
-  def __watchdog(self, event = None):
-    self.ardroneDriverRunnig = os.system('rosnode ping -c2 /ardrone_driver | grep "xmlrpc reply from" > /dev/null')
-  
+     
   def printNavdata(self, navdata):
     '''
     Callback function for navigation data comming from ardrone
@@ -602,9 +632,15 @@ STARTS application
 ************************************************************************************************************************'''
 if __name__ == '__main__':
   try:
+    includePlot = False
+    for arg in sys.argv:
+      if arg == 'plot':
+	includePlot = True
+      if arg == 'help':
+	print('This is the main file of the project whitin this script the following\nservices are executed:\n * ardrone driver\n * video output\n * joypad_ctrl\n * diagnosis\n * command based control\n * watchdog\nCommandLine Args:\n * plot --> plots magnetometer and rotation on GUI\n')
     # start application
     app = wx.App(redirect=False)
-    flight = Flight()
+    flight = Flight(plotRot=includePlot, plotMag=includePlot)
     shell = commands.Commands(flight)
     flight.setCommands(shell)
     flight.Show(True)

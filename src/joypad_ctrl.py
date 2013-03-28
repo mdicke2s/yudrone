@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 '''************************************************************************************************************************
-This node offers joypad-control to an attached ardrone
+This node offers joypad-control to an attached ardrone (using ardrone_autonomy)
+It is independent from other nodes of this project
 ***************************************************************************************************************************
 Project:	yudrone
 Author:		Michael Dicke
@@ -22,7 +23,7 @@ from sensor_msgs.msg import Joy
 from singleton import SingletonType
 
 '''************************************************************************************************************************
-main class of project (controller & view)
+node for joypad control
 ************************************************************************************************************************''' 
 class joypad_ctrl():
   __metaclass__ = SingletonType

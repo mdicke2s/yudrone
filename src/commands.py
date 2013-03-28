@@ -15,6 +15,11 @@ The following commands will block if self.__lock != -1
 - Search(..)
 - Face(..)
 **************************************************************************************************
+TODO
+* spiral search
+* approach target
+* yaw on magnetometer
+**************************************************************************************************
 Project:	yudrone
 Author:		Michael Dicke
 Repository:	https://github.com/mdicke2s/yudrone
@@ -30,13 +35,18 @@ from yudrone.msg import commandsMsg
 from std_msgs.msg import Int32
 import math
 
+# Names of patterns
 PATTERNS = {0:'4x4_45.patt', 1:'4x4_47.patt', 2:'4x4_91.patt', 3:'4x4_93.patt', 4:'patt.hiro'}
+# Facing
 FACESTATES = {0:'YAW', 1:'ALTD', 2:'PERPEND', 3:'DIST'}
-SEARCH = {0:10, 1:-30, 2:60, 3:-100, 4:150, 5:-200, 6:360}
+STATEDURATION = {0:0.5, 1:0.5, 2:1.5, 3:1.0} # change faceState after X seconds
+FACEDIST = 1600 # designated to be 1.6 m far from target
+# searching (degrees of yaw)
+SEARCH = {0:-30, 1:60, 2:-100, 3:150, 4:-200, 5:360}
+# rates
 NAVRATE = 10.0 #Hz
 CONTROLLRATE = 10.0 #Hz
-FACEDIST = 1600 # designated to be 1.6 m far from target
-#STATEDURATION = 0.5 # change faceState after 0.5 second
+
 
 class Commands:
   '''****************************************************************************************************
@@ -49,6 +59,7 @@ class Commands:
     (optional parameter) flight is yudrone gui
     '''
     self.__facedTagNr = -1
+    self.__faceLostCounter = 20
     self.__maxAltitude = 2000
     self.__minAltitude = 100
     self.__yawSpeed = 100
@@ -68,7 +79,7 @@ class Commands:
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )	# artoolkit
     
     self.pub_lockCmd = rospy.Publisher( "yudrone/lock_cmd", Int32 )				# yudrone_cmd reports lock for other commands
-    self.sub_com = rospy.Subscriber( "yudrone/commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
+    self.sub_com = rospy.Subscriber( "yudrone_commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
     
     if flight == None:
       # this code applies for usage WITHOUT gui
@@ -114,7 +125,7 @@ class Commands:
     sets a flag, which blocks other commands to be executed
     usage example:
       from yudrone.msg import commandsMsg
-      pub=rospy.Publisher('yudrone/commands', commandsMsg)
+      pub=rospy.Publisher('yudrone_commands', commandsMsg)
       m=commandsMsg()
       m.hasYaw=True
       m.yaw=500
@@ -475,6 +486,10 @@ class Commands:
       self.__onFace()
   
   def __onFace(self, event=None):              
+    '''
+    callback for Face(..) [which only initializes facing]
+    performs face until 'Release()' or tag lost for longer time
+    '''
     # select tag
     facedTag = Tag()
     for tag in self.tagMsg.tags:
@@ -523,13 +538,18 @@ class Commands:
         
       # elevate to face tag
       if self.__faceAlt == True and self.__faceState == 1:
-        self.__aim['lz'] = (-(cy - .5)/.5)
+	if self.__maxAltitude > self.navdata.altd and \
+	  (self.__minAltitude < self.navdata.altd or \
+	  self.navdata.altd == 0): # if altitude is within tresholds or UAV on ground (during dry tests)
+	  self.__aim['lz'] = (-(cy - .5)/.5)
                 
-      # move perpendicular to tag
+      # move perpendicular to tag [operates on two dimensions]
       if self.__facePerpend == True and self.__faceState == 2:
         self.__aim['ly'] = 0.25 * facedTag.yRot  
+        self.__aim['az'] = (-(cx - .5)/.5)
       else:
         self.__aim['ly'] = 0.0
+        self.__aim['az'] = 0.0
       
       # move to certain distance of tag
       if self.__faceDist == True and self.__faceState == 3:
@@ -545,10 +565,10 @@ class Commands:
 	  abs(self.__aim['lz']) < 0.02 and self.__faceState == 1 or \
 	  abs(self.__aim['ly']) < 0.02 and self.__faceState == 2 or \
 	  abs(self.__aim['lx']) < 0.02 and self.__faceState == 3 or \
-	  self.__faceStateCounter > int(CONTROLLRATE*0.5) and self.__faceState == 0 or \
-	  self.__faceStateCounter > int(CONTROLLRATE*0.5) and self.__faceState == 1 or \
-	  self.__faceStateCounter > int(CONTROLLRATE*1.5) and self.__faceState == 2 or \
-	  self.__faceStateCounter > int(CONTROLLRATE*1.0) and self.__faceState == 3:
+	  self.__faceStateCounter > int(CONTROLLRATE*STATEDURATION[0]) and self.__faceState == 0 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*STATEDURATION[1]) and self.__faceState == 1 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*STATEDURATION[2]) and self.__faceState == 2 or \
+	  self.__faceStateCounter > int(CONTROLLRATE*STATEDURATION[3]) and self.__faceState == 3:
 	# eiter if one of the states is done, or if too long in one state
 	self.__faceState = (self.__faceState+1) % 4
 	rospy.loginfo('Face-state = ' + FACESTATES[self.__faceState])
@@ -591,24 +611,32 @@ class Commands:
     else:
       print('Searching ' + str(tagNr))
       self.__searchState = 0
-      # todo self.___searchTag???
+      #self.___searchTag = tagNr
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
     
   def __onSearch(self, event=None):
     if self.__faceLostCounter < 3 or self.__searchState == -1:
+      # no reason to search
       self.__reset_twist(0) #cancel search
       self.__searchState = 0 # reset search parameter
-    else:	# lost since 0.4s
+    else:# lost since 0.4s
       # keep searching
-      if self.__aim['az'] == 0: # only if last yaw finished # TODO wait until duration is over
+      if self.__aim['az'] == 0: # only if last yaw finished
         rospy.loginfo('performing search stage %i'%self.__searchState)
-      if self.__reset_twist_timer.isAlive():
+      if self.__reset_twist_timer.isAlive(): # shutdown 'old' timer if still alive (to avoid __onReset by old timer)
         self.__reset_twist_timer.shutdown()
+      
+      # perform next Yaw using searchstate values
       self.Yaw(SEARCH[self.__searchState])
-      duration = rospy.Duration(math.fabs(self.__searchState)/100) 
-      self.__searchState = (self.__searchState + 1) % 7
+      duration = rospy.Duration(math.fabs(SEARCH[self.__searchState])/100 + 0.5) # waiting as long as turn lasts (same code as in Yaw +0.5s)
+      
+      # repeat self.__searchState = (self.__searchState + 1) % 7
+      self.__searchState = (self.__searchState + 1)
+      if self.__searchState > 5:
+	self.__searchState = -1
+      
       # call again
-      rospy.Timer(rospy.duration(0.1), self.__onSearch, oneshot=True)
+      rospy.Timer(duration, self.__onSearch, oneshot=True)
       
   def Approach(self, tagNr):
     '''

@@ -30,6 +30,14 @@ Topics:
 
 For more information on the software read file and function headers.
 
+TODOs before field trials
+* demo videos
+* poster
+* boxes
+* paper draft
+* thesis draft
+* (project report for HBRS)
+
 Hints:
 ```sh
 

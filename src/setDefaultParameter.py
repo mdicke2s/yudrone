@@ -31,7 +31,7 @@ top-level-code
 ************************************************************************************************************************'''
 if __name__ == '__main__':
   try:
-    rospy.init_node('yudrone_param')
+    rospy.init_node('yudrone/param')
     setDefaultParameter()
   except:
     print 'Exception occured'
