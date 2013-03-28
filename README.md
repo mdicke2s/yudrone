@@ -40,6 +40,8 @@ TODOs before field trials
 
 Hints:
 ```sh
+# to install yudrone make all dependent packages
+# and copy add_to_ar_recog_bin.zip into .../ar_recog/bin
 
 #ardrone_autonomy cli
 rosrun ardrone_autonomy ardrone_driver [-ip x.x.x.x]
