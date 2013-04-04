@@ -25,7 +25,10 @@ Nodes:
 
 Topics:
 * "yudrone/commands", commandsMsg, yudrone_cmd listenes command messages
-* "yudrone/lock_cmd", Int32, yudrone_cmd reports lock (if -1 it is blocked for incomming commands)
+* "yudrone/cmdStatus", commandStatus,
+  * yudrone_cmd reports availability for incomming commands (lock = false)
+  * yudrone_cmd reports block for incomming commands (lock = true, id = command_that_is_executed)
+  * yudrone_cmd reports status changes for commands beeing procecced (status = running/done_successfully/errorXYZ, id = command_that_is_executed)
 * "yudrone/lock_joypad", Bool, is used to lock joysticks during task performance
 
 To install yudrone:
@@ -49,40 +52,50 @@ Schedule:
   <tr>
     <th>Day</th>
     <th>Time</th>
-    <th>task</th>
+    <th>goal</th>
   </tr>
   <tr>
-    <td>5</td>
+    <td>Fr 5</td>
     <td>8am-3pm</td>
-    <td></td>
+    <td>state machine and yudrone_cmd are joined</td>
   </tr>
   <tr>
-    <td>8</td>
+    <td>Weekend</td>
+    <td>???</td>
+    <td>in yudrone_cmd: timers are substituted with event-queue</td>
+  </tr>
+  <tr>
+    <td>Mo 8</td>
     <td>10am-5pm</td>
-    <td></td>
+    <td>modified yudrone_cmd was tested,<br/>experimental run successfull</td>
   </tr>
   <tr>
-    <td>9</td>
+    <td>Tu 9</td>
     <td>8am-2pm</td>
     <td></td>
   </tr>
   <tr>
-    <td>11</td>
+    <td>Th 11</td>
     <td>3am-6pm</td>
-    <td></td>
+    <td>box(es) build and tags printed</td>
   </tr>
   <tr>
-    <td>12</td>
+    <td>Fr 12</td>
     <td>8am-5pm</td>
     <td></td>
   </tr>
   <tr>
-    <td>15</td>
+    <td>Weekend</td>
+    <td>???</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Mo 15</td>
     <td>8am-5pm</td>
     <td></td>
   </tr>
   <tr>
-    <td>16</td>
+    <td>Tu 16</td>
     <td>8am-5pm</td>
     <td></td>
   </tr>
