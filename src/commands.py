@@ -14,6 +14,7 @@ The following commands will block if self.__lock != -1
 - Approach(..)
 - Search(..)
 - Face(..)
+- Navigate(..)
 **************************************************************************************************
 TODO
 * spiral search
@@ -31,12 +32,12 @@ roslib.load_manifest('yudrone')
 from flight import *
 from ar_recog.msg import Tags, Tag
 from geometry_msgs.msg import Twist
-from yudrone.msg import commandsMsg
+from yudrone.msg import commandsMsg, commandStatus
 from std_msgs.msg import Int32
 import math
 
 # Names of patterns
-PATTERNS = {0:'4x4_45.patt', 1:'4x4_47.patt', 2:'4x4_91.patt', 3:'4x4_93.patt', 4:'patt.hiro'}
+PATTERNS = {0:'alpha', 1:'4x4_19', 2:'4x4_23', 3:'4x4_29',4:'4x4_45',5:'beta',5:'4x4_47',7:'4x4_49',8:'4x4_83',9:'4x4_89',10:'gamma',11:'4x4_91',12:'4x4_93',13:'4x4_95',14:'4x4_98',15:'delta',16:'cents',17:'eta',18:'hiro',19:'iota',20:'epsilon',21:'kanji',22:'kappa',23:'theta',24:'zeta'}
 # Facing
 FACESTATES = {0:'YAW', 1:'ALTD', 2:'PERPEND', 3:'DIST'}
 STATEDURATION = {0:0.5, 1:0.5, 2:1.5, 3:1.0} # change faceState after X seconds
@@ -69,6 +70,7 @@ class Commands:
     self.imgheight = 360
     self.imgwidth = 640
     self.__aim = {'ax':0.0, 'ay':0.0, 'az':0.0, 'lx':0.0, 'ly':0.0, 'lz':0.0}
+    self.navdata = None
     
     self.pub_land = rospy.Publisher( "ardrone/land", Empty )		# ardrone land command
     self.pub_takeoff = rospy.Publisher( "ardrone/takeoff", Empty )	# ardrone takeoff command
@@ -78,14 +80,14 @@ class Commands:
     
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )	# artoolkit
     
-    self.pub_lockCmd = rospy.Publisher( "yudrone/lock_cmd", Int32 )				# yudrone_cmd reports lock for other commands
+    self.pub_cmdStatus = rospy.Publisher( "yudrone/cmdStatus", commandStatus )		# yudrone_cmd reports availability and status
     self.sub_com = rospy.Subscriber( "yudrone_commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
     
     if flight == None:
       # this code applies for usage WITHOUT gui
       rospy.init_node('yudrone_cmd')
       rospy.loginfo("init 'yudrone commands' stand-alone")
-      rospy.loginfo("make sure the following nodes are running: ardrone_driver, ar_pose")
+      rospy.loginfo("make sure the following nodes are running: ardrone_driver, ar_recog")
       self.updateNavSwitch(True)
       self.hasGui = False
     else:
@@ -94,9 +96,9 @@ class Commands:
       self.updateNavSwitch(False)
       self.hasGui = True
     
+    # stop moving and start naviagtion loop
     self.__reset_twist(0.1)
     self.navTimer = rospy.Timer(rospy.Duration(1.0/NAVRATE), self.__onNavigate)
-    self.navdata = None
   
   def __onNavigate(self, event = None):
     '''
@@ -119,10 +121,21 @@ class Commands:
 
       # publish yaw to ardrone
       self.pub_yaw.publish(yaw)
+  
+  def lockWarning(self):
+    '''
+    display log warning
+    anounce status on cmdStatus topic
     
+    Explanation: The node was locked and is supposed not to react on incomming naviagtion commands
+    '''
+    rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
+    status = commandStatus(id=self.__lockNr, isLocked=True, status="running")
+    self.pub_cmdStatus.publish(status)
+  
   def __lock(self, lockNr):
     '''
-    sets a flag, which blocks other commands to be executed
+    sets a lock flag, which blocks other commands to be executed
     usage example:
       from yudrone.msg import commandsMsg
       pub=rospy.Publisher('yudrone_commands', commandsMsg)
@@ -139,18 +152,31 @@ class Commands:
       # 3 <-- this sequential number is set by publishing the message (not by instanciation!)
     '''
     if lockNr > 0:
-      self.__lockNr = lockNr
-      self.pub_lockCmd.publish(self.__lockNr)
+      if self.__lockNr == -1:
+	# if not already locked
+	self.__lockNr = lockNr
+      status = commandStatus(id=self.__lockNr, isLocked=True, status="running")
+      self.pub_cmdStatus.publish(status)
     else:
       rospy.logerr('invalid lockNr: %i'%lockNr)
   
-  def __unLock(self):
+  def __unLock(self, exitStatus=""):
     '''
-    resets a flag, allowing other commands to be executed
+    resets lock flag, allowing other commands to be executed
+    
+    Parameter exitStatus:
+      if not empty, the current executed command is finished with the given status
     '''
+    if exitStatus != "":
+      # announce exit of old command
+      status = commandStatus(id=self.lockNr, isLocked=False, status=exitStatus)
+      self.pub_cmdStatus.publish(status)
+      
     if self.__unLock != -1:
+      # dissolve lock and announce availability
       self.__lockNr = -1
-      self.pub_lockCmd.publish(self.__lockNr)
+      status = commandStatus(id=-1, isLocked=False, status="available")
+      self.pub_cmdStatus.publish(status)
   
   def handle_command(self, msg):
     '''
@@ -162,38 +188,41 @@ class Commands:
       self.pub_yaw.publish(msg.twist) # or better use funtion???
     if msg.hasAltd == True:
       self.Altitude(msg.altd)
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasMaxAltd == True:
       self.MaxAltd(msg.MaxAltd)
     if msg.hasMinAltd == True:
       self.MinAltd(msg.MixAltd)
     if msg.hasYaw == True:
       self.Yaw(msg.yaw)
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasHorizontal == True:
       self.Horizontal(msg.horizontalX, msg.horizontalY)
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasFace == True:
       self.Face(msg.tagNr) # TODO add?, faceYaw = True, faceDist = True, faceAlt = True, facePerpend = True, keepSearching = False)
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasRelease == True:
       self.Release()
     if msg.hasSearch == True:
       self.Search(msg.tagNr)
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasApproach == True:
       self.Approach(msg.tagNr)
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasNavigate == True:
       self.Navigate(msg.nav_XYZ_RxRyRz[0], msg.nav_XYZ_RxRyRz[1], msg.nav_XYZ_RxRyRz[2], msg.nav_XYZ_RxRyRz[3], msg.nav_XYZ_RxRyRz[4], msg.nav_XYZ_RxRyRz[5])
+      self.__lock(msg.header.seq) # lock instance
     if msg.hasYawSpeed == True:
       self.YawSpeed(msg.yawSpeed)
     if msg.hasHrzSpeed == True:
       self.HrzSpeed(msg.hrzSpeed)
       
-    # lock instance
-    self.__lock(msg.header.seq)
-    
     # not implemented by now...
     ## TakeOff(self): Land(self): ToggleEmerg(self) 
     ## __reset_twist(delay = 0)
     
     
-	
   def updateNav(self, navdata):
     '''
     set navdata (from ardrone)
@@ -205,6 +234,7 @@ class Commands:
     set tags (from artoolkit)
     '''
     self.tagMsg = tagMsg
+    # TODO stop search
   
   def updateResolution(self, height, width):
     '''
@@ -240,10 +270,7 @@ class Commands:
       positive means up 
     '''    
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       # set designated altitude
       self.__aimedAltd = self.navdata.altd + delta
@@ -278,7 +305,7 @@ class Commands:
       #stop lifting
       rospy.loginfo('reached altitude @ %i'%reading1)
       self.__reset_twist(0)
-      self.__unLock()
+      self.__unLock("done_sucessfully")
     else:
       #call again
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__altdStop, oneshot=True) 
@@ -317,12 +344,23 @@ class Commands:
     else:
       self.__reset_twist_timer = rospy.Timer(rospy.Duration(delay), self.__onReset, oneshot=True)
     
-  def __onReset(self, event=None, silent = False):
+  def __onReset(self, event=None):
+    '''
+    resets twist (= stop moving)
+    + loginfo and unlock yudrone/cmdStatus
+    '''
     self.__aim['ax'] = self.__aim['ay'] = self.__aim['az'] = 0
     self.__aim['lz'] = self.__aim['lx'] = self.__aim['ly'] = 0
-    if silent == False:
-      rospy.loginfo('Aim=(0,0,0,0,0,0)')
-      self.__unLock()
+    rospy.loginfo('Aim=(0,0,0,0,0,0)')
+    self.__unLock()
+      
+  def __onResetSilent(self, event=None):
+    '''
+    resets twist (= stop moving)
+    without loginfo or unlock yudrone/cmdStatus
+    '''
+    self.__aim['ax'] = self.__aim['ay'] = self.__aim['az'] = 0
+    self.__aim['lz'] = self.__aim['lx'] = self.__aim['ly'] = 0
   
   def Yaw(self, angle):
     '''
@@ -334,10 +372,7 @@ class Commands:
       angle [deg] (integer) -180, ..., +180 negative is clockwise 
     '''
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       print('Yaw ' + str(angle))
       # set yaw parameter
@@ -363,10 +398,7 @@ class Commands:
       x[cm], y[cm] (both integer)
     '''
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       print('Horizontal movement')
       # set yaw parameter
@@ -455,7 +487,7 @@ class Commands:
   '''****************************************************************************************************
   *											high level navigation
   ****************************************************************************************************'''
-  def Face(self, tagNr, faceYaw = True, faceDist = True, faceAlt = True, facePerpend = True, keepSearching = False):
+  def Face(self, tagNr, faceYaw = True, faceDist = True, faceAlt = False, facePerpend = True, keepSearching = False):
     '''
     Action:
       Faces a specified tag. As long as this tag is visible in the field of view, the Ardrone will
@@ -465,10 +497,7 @@ class Commands:
       tagNr (integer)
     '''
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       print('Faceing "' + PATTERNS[tagNr] + '"')
       self.__facedTagNr = tagNr
@@ -498,7 +527,7 @@ class Commands:
 
     if facedTag.diameter == 0:
       # designated tag is not in range
-      self.__onReset(None, True) # stop moving (silent)
+      self.__onResetSilent(None) # stop moving (silent)
       if self.__reset_twist_timer.isAlive():
         # stop last running timer
         self.__reset_twist_timer.shutdown()
@@ -573,7 +602,7 @@ class Commands:
 	self.__faceState = (self.__faceState+1) % 4
 	rospy.loginfo('Face-state = ' + FACESTATES[self.__faceState])
 	self.__faceStateCounter = 0
-	self.__onReset(None, True) # stop moving (silent)
+	self.__onResetSilent(None) # stop moving (silent)
 	
     
     # keep faceing
@@ -589,7 +618,7 @@ class Commands:
     Parameter:
       tagNr (integer)
     '''
-    self.__unLock()
+    self.__unLock("released")
     if self.__facedTagNr > -1:
       print('released tag nr %i', self.__facedTagNr)
       self.__facedTagNr = -1
@@ -604,10 +633,7 @@ class Commands:
       tagNr (integer)
     '''
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       print('Searching ' + str(tagNr))
       self.__searchState = 0
@@ -627,16 +653,22 @@ class Commands:
         self.__reset_twist_timer.shutdown()
       
       # perform next Yaw using searchstate values
-      self.Yaw(SEARCH[self.__searchState])
-      duration = rospy.Duration(math.fabs(SEARCH[self.__searchState])/100 + 0.5) # waiting as long as turn lasts (same code as in Yaw +0.5s)
+      angle = SEARCH[self.__searchState]
+      print('Yaw ' + str(angle))
+      self.__aim['az'] = angle/math.fabs(angle) * self.__yawSpeed
+      durationRecall = rospy.Duration(math.fabs(angle)/100 + 0.5) # waiting as long as turn lasts (same code as in Yaw +0.5s)
+      durationStop = rospy.Duration(math.fabs(angle)/100) # waiting as long as turn lasts (same code as in Yaw)
       
       # repeat self.__searchState = (self.__searchState + 1) % 7
       self.__searchState = (self.__searchState + 1)
       if self.__searchState > 5:
 	self.__searchState = -1
       
+      # stop moving
+      rospy.Timer(durationStop, self.__onResetSilent, oneshot=True)
+      
       # call again
-      rospy.Timer(duration, self.__onSearch, oneshot=True)
+      rospy.Timer(durationRecall, self.__onSearch, oneshot=True)
       
   def Approach(self, tagNr):
     '''
@@ -647,10 +679,7 @@ class Commands:
       tagNr (integer)
     '''
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       print('Approaching ' + str(tagNr) + ' __unimplemented') 
     
@@ -663,10 +692,7 @@ class Commands:
       x, y, z,xRot, yRot, zRot (all integer) 
     '''
     if self.__lockNr != -1:
-      # that means the node was locked and is supposed not to react on incomming naviagtion commands
-      # lock status can be read from the topic 'yudrone/lock_cmd'
-      rospy.logwarn('Command was not executed, it is locked by (%i)'%self.__lockNr)
-      self.pub_lockCmd.publish(self.__lockNr)
+      self.lockWarning() # command is not executed, see function description
     else:
       print('Navigate cmd' + ' __unimplemented') 
   
