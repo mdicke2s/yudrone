@@ -66,6 +66,7 @@ class Commands:
     self.__yawSpeed = 100
     self.__hrzSpeed = 100
     self.__searchState = 0
+    self.__searchTagNr = -1
     self.__lockNr = -1
     self.imgheight = 360
     self.imgwidth = 640
@@ -81,7 +82,7 @@ class Commands:
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )	# artoolkit
     
     self.pub_cmdStatus = rospy.Publisher( "yudrone/cmdStatus", commandStatus )		# yudrone_cmd reports availability and status
-    self.sub_com = rospy.Subscriber( "yudrone_commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
+    self.sub_com = rospy.Subscriber( "yudrone/commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
     
     if flight == None:
       # this code applies for usage WITHOUT gui
@@ -160,7 +161,7 @@ class Commands:
     else:
       rospy.logerr('invalid lockNr: %i'%lockNr)
   
-  def __unLock(self, exitStatus=""):
+  def __unlock(self, exitStatus=""):
     '''
     resets lock flag, allowing other commands to be executed
     
@@ -169,10 +170,10 @@ class Commands:
     '''
     if exitStatus != "":
       # announce exit of old command
-      status = commandStatus(id=self.lockNr, isLocked=False, status=exitStatus)
+      status = commandStatus(id=self.__lockNr, isLocked=False, status=exitStatus)
       self.pub_cmdStatus.publish(status)
       
-    if self.__unLock != -1:
+    if self.__lockNr != -1:
       # dissolve lock and announce availability
       self.__lockNr = -1
       status = commandStatus(id=-1, isLocked=False, status="available")
@@ -187,7 +188,7 @@ class Commands:
     if msg.hasTwist == True:
       self.pub_yaw.publish(msg.twist) # or better use funtion???
     if msg.hasAltd == True:
-      self.Altitude(msg.altd)
+      self.Altitude(msg.altd)      
       self.__lock(msg.header.seq) # lock instance
     if msg.hasMaxAltd == True:
       self.MaxAltd(msg.MaxAltd)
@@ -305,7 +306,7 @@ class Commands:
       #stop lifting
       rospy.loginfo('reached altitude @ %i'%reading1)
       self.__reset_twist(0)
-      self.__unLock("done_sucessfully")
+      self.__unlock("done_sucessfully")
     else:
       #call again
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__altdStop, oneshot=True) 
@@ -352,7 +353,7 @@ class Commands:
     self.__aim['ax'] = self.__aim['ay'] = self.__aim['az'] = 0
     self.__aim['lz'] = self.__aim['lx'] = self.__aim['ly'] = 0
     rospy.loginfo('Aim=(0,0,0,0,0,0)')
-    self.__unLock()
+    self.__unlock()
       
   def __onResetSilent(self, event=None):
     '''
@@ -514,16 +515,20 @@ class Commands:
       # start facing
       self.__onFace()
   
+  def getTag(self, tagNr):
+    # select tag
+    facedTag = Tag()
+    for tag in self.tagMsg.tags:
+      if (tag.id == tagNr):
+        facedTag = tag
+    return facedTag
+  
   def __onFace(self, event=None):              
     '''
     callback for Face(..) [which only initializes facing]
     performs face until 'Release()' or tag lost for longer time
     '''
-    # select tag
-    facedTag = Tag()
-    for tag in self.tagMsg.tags:
-      if (tag.id == self.__facedTagNr):
-        facedTag = tag
+    facedTag = self.getTag(self.__facedTagNr)
 
     if facedTag.diameter == 0:
       # designated tag is not in range
@@ -618,7 +623,7 @@ class Commands:
     Parameter:
       tagNr (integer)
     '''
-    self.__unLock("released")
+    self.__unlock("released")
     if self.__facedTagNr > -1:
       print('released tag nr %i', self.__facedTagNr)
       self.__facedTagNr = -1
@@ -636,14 +641,23 @@ class Commands:
       self.lockWarning() # command is not executed, see function description
     else:
       print('Searching ' + str(tagNr))
+      self.__searchTagNr = tagNr
       self.__searchState = 0
-      #self.___searchTag = tagNr
+      #self.___searchTagNr = tagNr
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
     
   def __onSearch(self, event=None):
-    if self.__faceLostCounter < 3 or self.__searchState == -1:
+    facedTag = self.getTag(self.__searchTagNr)
+
+    if facedTag.diameter != 0:
+      # search was successfull
+      self.__unlock("done_successfully")
+      rospy.loginfo("search successfull")
+      self.__searchState = 0 # reset search parameter
+      self.__searchTagNr = -1
+    elif self.__faceLostCounter < 3 or self.__searchState == -1:
       # no reason to search
-      self.__reset_twist(0) #cancel search
+      self.__unlock()
       self.__searchState = 0 # reset search parameter
     else:# lost since 0.4s
       # keep searching

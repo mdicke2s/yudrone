@@ -16,16 +16,33 @@ import roslib; roslib.load_manifest('yudrone'); roslib.load_manifest('smach_ros'
 from flight import *
 from ar_recog.msg import Tags, Tag
 from geometry_msgs.msg import Twist
-from yudrone.msg import commandsMsg
+from yudrone.msg import commandsMsg, commandStatus
 from std_msgs.msg import Int32
 
 import rospy
 import smach
 import smach_ros
 
-# define state
-class GetNode(smach.State):
+import abc
+
+# define general state
+# comes up with message passing for yudrone_command
+class communicatingState(smach.State):
+    __metaclass__ = abc.ABCMeta
     def __init__(self):
+	self.pubCommands = rospy.Publisher('yudrone/commands', commandsMsg)
+	self.subCommandStatus = rospy.Subscriber( "yudrone/cmdStatus", commandStatus, self.handleStatus )
+	rospy.loginfo("communicationState initialized")
+	rospy.sleep(0.3)
+
+    @abc.abstractmethod
+    def handleStatus(self, msg):
+      # receive status information and response
+      return
+  
+class GetNode(communicatingState):
+    def __init__(self):
+        communicatingState.__init__(self)
         smach.State.__init__(self, outcomes=['no_node','acquired_node'])
 
     def execute(self, userdata):
@@ -34,28 +51,64 @@ class GetNode(smach.State):
             return 'no_node'
         else:
             return 'acquired_node'
+            
+    def handleStatus(self, msg):
+      return
 
-class SearchNode(smach.State):
+class SearchNode(communicatingState):
     def __init__(self):
+        communicatingState.__init__(self)
         smach.State.__init__(self, outcomes=['still_lost','acquired_node'])
+        self.searchIsRunning = False
+        self.commandID = -1	
+        
+        m = commandsMsg()
+        self.pubCommands.publish(m) # send empty message as initialization
     
     def execute(self, userdata):
         rospy.loginfo('Executing state SEARCH');
-        if False:
+        self.hasAcquiredNode = False
+        
+        # execute search command
+        if self.searchIsRunning == False and self.hasAcquiredNode == False:
+	  m=commandsMsg()
+	  m.hasSearch=True
+	  m.tagNr=11
+	  self.pubCommands.publish(m)
+	  self.commandID = m.header.seq
+	  rospy.loginfo("search command submitted: id = %i"%self.commandID)
+	  self.searchIsRunning = True
+	
+	# busy wait for result
+        while (True):
+	  rospy.sleep(0.5)
+	  if self.hasAcquiredNode == False:
             return 'still_lost'
-        else:
+          else:
             return 'acquired_node'
+    
+    def handleStatus(self, msg):
+	rospy.loginfo("Status changed: (id=%i) %s"%(msg.id, msg.status))
+	if msg.id == -1 and msg.status == "available":
+	  self.searchIsRunning = False
+        if msg.id == self.commandID and msg.status == "done_successfully":
+	  self.hasAcquiredNode = True
 
-class TargetApproachNode(smach.State):
+class TargetApproachNode(communicatingState):
     def __init__(self):
+        communicatingState.__init__(self)
         smach.State.__init__(self, outcomes=['still_tracking','in_range','lost'])
     
     def execute(self, userdata):
         rospy.loginfo('Executing state TARGET_APPROACH');
-	return 'still_tracking'
+	return 'in_range'
+            
+    def handleStatus(self, msg):
+      return
 
-class DockNode(smach.State):
+class DockNode(communicatingState):
     def __init__(self):
+        communicatingState.__init__(self)
         smach.State.__init__(self, outcomes=['docked','lost'])
     
     def execute(self, userdata):
@@ -64,20 +117,27 @@ class DockNode(smach.State):
             return 'docked'
         else:
             return 'lost'
+            
+    def handleStatus(self, msg):
+      return
 
-class HoverNode(smach.State):
+class HoverNode(communicatingState):
     def __init__(self):
+        communicatingState.__init__(self)
         smach.State.__init__(self, outcomes=['finished'])
     
     def execute(self, userdata):
         rospy.loginfo('Executing state HOVER');
         return 'finished'
+            
+    def handleStatus(self, msg):
+      return
 
 
 # main
 def main():
     rospy.init_node('drone_network_traverse_state_machine')
-    
+        
     # Create a SMACH state machine
     sm = smach.StateMachine(outcomes=['landed', 'gave_up'])
     
@@ -100,6 +160,11 @@ def main():
                                'lost':'SEARCH'})
         smach.StateMachine.add('HOVER', HoverNode(), 
                                transitions={'finished':'GET'})
+    
+    
+    # Create and start the introspection server
+    sis = smach_ros.IntrospectionServer('yudrone_states', sm, 'yodrone/stateMachine')
+    sis.start()
     
     # Execute SMACH plan
     outcome = sm.execute()
