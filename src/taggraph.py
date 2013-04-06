@@ -25,28 +25,40 @@ import smach_ros
 
 import abc
 
-# define general state
-# comes up with message passing for yudrone_command
-class communicatingState(smach.State):
+''' define general state ******************************************************'''
+# superclass that comes up with message passing for yudrone_command
+# contains static variables to be accessed from all stati
+class ydState(smach.State):
     __metaclass__ = abc.ABCMeta
     def __init__(self):
 	self.pubCommands = rospy.Publisher('yudrone/commands', commandsMsg)
 	self.subCommandStatus = rospy.Subscriber( "yudrone/cmdStatus", commandStatus, self.handleStatus )
 	rospy.loginfo("communicationState initialized")
 	rospy.sleep(0.3)
+	
+        # initialize tag order
+        ydState.tagList=(11, 18)
+        ydState.tagPointer = 0
 
+    def getTagNr(self):
+	return ydState.tagList[ydState.tagPointer]
+	
+    def setToNextTag(self):
+	ydState.tagPointer = (ydState.tagPointer + 1) % 2
+    
     @abc.abstractmethod
     def handleStatus(self, msg):
       # receive status information and response
       return
   
-class GetNode(communicatingState):
+''' define getNode state ******************************************************'''
+class GetNode(ydState):
     def __init__(self):
-        communicatingState.__init__(self)
+        ydState.__init__(self)
         smach.State.__init__(self, outcomes=['no_node','acquired_node'])
+        
 
     def execute(self, userdata):
-        rospy.loginfo('Executing state GET');
         if False:
             return 'no_node'
         else:
@@ -55,29 +67,31 @@ class GetNode(communicatingState):
     def handleStatus(self, msg):
       return
 
-class SearchNode(communicatingState):
+''' define searchNode state ******************************************************'''
+class SearchNode(ydState):
     def __init__(self):
-        communicatingState.__init__(self)
+        ydState.__init__(self)
         smach.State.__init__(self, outcomes=['still_lost','acquired_node'])
         self.searchIsRunning = False
         self.commandID = -1	
         
         m = commandsMsg()
         self.pubCommands.publish(m) # send empty message as initialization
-    
+        
     def execute(self, userdata):
-        rospy.loginfo('Executing state SEARCH');
         self.hasAcquiredNode = False
         
         # execute search command
         if self.searchIsRunning == False and self.hasAcquiredNode == False:
 	  m=commandsMsg()
 	  m.hasSearch=True
-	  m.tagNr=11
+	  m.tagNr=self.getTagNr()
 	  self.pubCommands.publish(m)
 	  self.commandID = m.header.seq
 	  rospy.loginfo("search command submitted: id = %i"%self.commandID)
 	  self.searchIsRunning = True
+	if self.searchIsRunning == True and self.hasAcquiredNode == False:
+	  rospy.loginfo("still searching for tag nr %i"%self.getTagNr())
 	
 	# busy wait for result
         while (True):
@@ -88,31 +102,78 @@ class SearchNode(communicatingState):
             return 'acquired_node'
     
     def handleStatus(self, msg):
-	rospy.loginfo("Status changed: (id=%i) %s"%(msg.id, msg.status))
+	rospy.loginfo("Command status changed: (id=%i) %s"%(msg.id, msg.status))
 	if msg.id == -1 and msg.status == "available":
+	  # search was finished without success
 	  self.searchIsRunning = False
         if msg.id == self.commandID and msg.status == "done_successfully":
+	  # search was finished successfully
 	  self.hasAcquiredNode = True
+	  self.setToNextTag()
 
-class TargetApproachNode(communicatingState):
+
+''' define faceNode state ******************************************************'''
+class FaceNode(ydState):
     def __init__(self):
-        communicatingState.__init__(self)
+        ydState.__init__(self)
+        smach.State.__init__(self, outcomes=['lost','done'])
+        self.searchIsRunning = False
+        self.commandID = -1	
+        
+        m = commandsMsg()
+        self.pubCommands.publish(m) # send empty message as initialization
+	
+    def execute(self, userdata):
+        # execute face command
+        
+	m=commandsMsg()
+	m.hasFace=True
+	m.tagNr=self.getTagNr()
+	self.pubCommands.publish(m)
+	self.commandID = m.header.seq
+	rospy.loginfo("search command submitted: id = %i"%self.commandID)
+	self.searchIsRunning = True
+	if self.searchIsRunning == True and self.hasAcquiredNode == False:
+	  rospy.loginfo("still searching for tag nr %i"%self.getTagNr())
+	
+	# busy wait for result
+        while (True):
+	  rospy.sleep(0.5)
+	  if self.hasAcquiredNode == False:
+            return 'still_lost'
+          else:
+            return 'acquired_node'
+    
+    def handleStatus(self, msg):
+	rospy.loginfo("Command status changed: (id=%i) %s"%(msg.id, msg.status))
+	if msg.id == -1 and msg.status == "available":
+	  # search was finished without success
+	  self.searchIsRunning = False
+        if msg.id == self.commandID and msg.status == "done_successfully":
+	  # search was finished successfully
+	  self.hasAcquiredNode = True
+	  self.setToNextTag()
+	  
+	  
+''' define TargetApproachNode state ******************************************************'''
+class TargetApproachNode(ydState):
+    def __init__(self):
+        ydState.__init__(self)
         smach.State.__init__(self, outcomes=['still_tracking','in_range','lost'])
     
     def execute(self, userdata):
-        rospy.loginfo('Executing state TARGET_APPROACH');
 	return 'in_range'
             
     def handleStatus(self, msg):
       return
 
-class DockNode(communicatingState):
+''' define DockNode state ******************************************************'''
+class DockNode(ydState):
     def __init__(self):
-        communicatingState.__init__(self)
+        ydState.__init__(self)
         smach.State.__init__(self, outcomes=['docked','lost'])
     
     def execute(self, userdata):
-        rospy.loginfo('Executing state DOCKING');
         if True:
             return 'docked'
         else:
@@ -121,20 +182,20 @@ class DockNode(communicatingState):
     def handleStatus(self, msg):
       return
 
-class HoverNode(communicatingState):
+''' define HoverNode state ******************************************************'''
+class HoverNode(ydState):
     def __init__(self):
-        communicatingState.__init__(self)
+        ydState.__init__(self)
         smach.State.__init__(self, outcomes=['finished'])
     
     def execute(self, userdata):
-        rospy.loginfo('Executing state HOVER');
         return 'finished'
             
     def handleStatus(self, msg):
       return
 
 
-# main
+''' main function ******************************************************'''
 def main():
     rospy.init_node('drone_network_traverse_state_machine')
         
@@ -150,7 +211,10 @@ def main():
                                'acquired_node':'SEARCH'})
         smach.StateMachine.add('SEARCH', SearchNode(), 
                                transitions={'still_lost':'SEARCH',
-                               'acquired_node':'TARGET_APPROACH'})
+                               'acquired_node':'FACE'})
+        smach.StateMachine.add('FACE', FaceNode(), 
+                               transitions={'lost':'SEARCH',
+                               'done':'TARGET_APPROACH'})
         smach.StateMachine.add('TARGET_APPROACH', TargetApproachNode(), 
                                transitions={'still_tracking':'TARGET_APPROACH',
                                'in_range':'DOCKING',

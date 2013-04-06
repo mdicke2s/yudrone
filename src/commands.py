@@ -43,7 +43,7 @@ FACESTATES = {0:'YAW', 1:'ALTD', 2:'PERPEND', 3:'DIST'}
 STATEDURATION = {0:0.5, 1:0.5, 2:1.5, 3:1.0} # change faceState after X seconds
 FACEDIST = 1600 # designated to be 1.6 m far from target
 # searching (degrees of yaw)
-SEARCH = {0:-30, 1:60, 2:-100, 3:150, 4:-200, 5:360}
+SEARCH = {0:-45, 1:90, 2:90, 3:90, 4:90, 5:90}
 # rates
 NAVRATE = 10.0 #Hz
 CONTROLLRATE = 10.0 #Hz
@@ -63,9 +63,9 @@ class Commands:
     self.__faceLostCounter = 20
     self.__maxAltitude = 2000
     self.__minAltitude = 100
-    self.__yawSpeed = 100
-    self.__hrzSpeed = 100
-    self.__searchState = 0
+    self.__yawSpeed = 0.5
+    self.__hrzSpeed = 0.5
+    self.__searchState = -1
     self.__searchTagNr = -1
     self.__lockNr = -1
     self.imgheight = 360
@@ -76,25 +76,23 @@ class Commands:
     self.pub_land = rospy.Publisher( "ardrone/land", Empty )		# ardrone land command
     self.pub_takeoff = rospy.Publisher( "ardrone/takeoff", Empty )	# ardrone takeoff command
     self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )	# ardrone emergency mode toggle
-    self.pub_yaw = rospy.Publisher( "/cmd_vel", Twist )		# ardrone navigation topic
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.updateNav )
     
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.updateTags )	# artoolkit
     
     self.pub_cmdStatus = rospy.Publisher( "yudrone/cmdStatus", commandStatus )		# yudrone_cmd reports availability and status
     self.sub_com = rospy.Subscriber( "yudrone/commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
+    self.pub_yaw = rospy.Publisher( "yudrone/cmd_vel", Twist )	# forwarded to ardrone navigation topic (except if joypad has control)
     
     if flight == None:
       # this code applies for usage WITHOUT gui
       rospy.init_node('yudrone_cmd')
       rospy.loginfo("init 'yudrone commands' stand-alone")
       rospy.loginfo("make sure the following nodes are running: ardrone_driver, ar_recog")
-      self.updateNavSwitch(True)
       self.hasGui = False
     else:
       # this code applies for usage WITH gui
       rospy.loginfo("init 'yudrone commands' using gui")
-      self.updateNavSwitch(False)
       self.hasGui = True
     
     # stop moving and start naviagtion loop
@@ -106,22 +104,22 @@ class Commands:
     this function is contigiously called by a timer  
     rate = NAVRATE
     '''
-    if self.NavigateSwitch == True:
-      # caculate values
-      yaw = Twist()
-      yaw.angular.x = self.__aim['ax']
-      yaw.angular.y = self.__aim['ay']
-      yaw.angular.z = self.__aim['az']
-      # p-controller
-      #if self.navdata.altd > 50:
-	#yaw.linear.z = (self.__aim['lz'] - self.navdata.altd) /10
-	#rospy.loginfo('lz: ' + str(yaw.linear.z))
-      yaw.linear.z = self.__aim['lz']
-      yaw.linear.x = self.__aim['lx']
-      yaw.linear.y = self.__aim['ly']
+  
+    # caculate values
+    yaw = Twist()
+    yaw.angular.x = self.__aim['ax']
+    yaw.angular.y = self.__aim['ay']
+    yaw.angular.z = self.__aim['az']
+    # p-controller
+    #if self.navdata.altd > 50:
+      #yaw.linear.z = (self.__aim['lz'] - self.navdata.altd) /10
+      #rospy.loginfo('lz: ' + str(yaw.linear.z))
+    yaw.linear.z = self.__aim['lz']
+    yaw.linear.x = self.__aim['lx']
+    yaw.linear.y = self.__aim['ly']
 
-      # publish yaw to ardrone
-      self.pub_yaw.publish(yaw)
+    # publish yaw to ardrone
+    self.pub_yaw.publish(yaw)
   
   def lockWarning(self):
     '''
@@ -245,18 +243,6 @@ class Commands:
     self.imgheight = height
     self.imgwidth = width
     
-  def updateNavSwitch(self, switch):
-    '''
-    enable or disable __onNavigate
-    '''
-    self.NavigateSwitch = switch
-    if switch == True:
-      rospy.loginfo('command driven navigation ENABLED')
-      self.__reset_twist()
-    else:
-      rospy.loginfo('command driven navigation DISABLED')
-      self.__reset_twist()
-    
   
   '''****************************************************************************************************
   *												tresholds
@@ -378,16 +364,20 @@ class Commands:
       print('Yaw ' + str(angle))
       # set yaw parameter
       self.__aim['az'] = angle/math.fabs(angle) * self.__yawSpeed
-      self.__reset_twist(math.fabs(angle)/100)
+      self.__reset_twist(math.fabs(angle)/(100*self.__yawSpeed) )
     
   def YawSpeed(self, val):
     '''
     Action:
       Sets the speed to be used performing Yaw().
     Parameter:
-      val = 1, 2, ..., 255
+      val in [0..2]
     '''
-    print('YawSpeed set to ' + str(val) + ' __unimplemented')
+    if val > 0.0 and val <=2.0:
+      self.__yawSpeed = val
+      print('YawSpeed set to ' + str(val))
+    else:
+      print('invalid YawSpeed ' + str(val))
     
   def Horizontal(self, x, y):
     '''
@@ -415,10 +405,13 @@ class Commands:
     Action:
       Sets the speed to be used performing Horizontal().
     Parameter:
-      1, 2, ..., 255
+      val in [0..1]
     '''
-    print('HrzSpeed set to ' + str(val))
-    self.__hrzSpeed = val
+    if val >0.0 and val <=1.0:
+      print('HrzSpeed set to ' + str(val))
+      self.__hrzSpeed = val
+    else:
+      print('invalid HrzSpeed ' + str(val))
     
   def TakeOff(self):
     '''
@@ -538,8 +531,8 @@ class Commands:
         self.__reset_twist_timer.shutdown()
       
       # start search
-      if self.__faceKeepSearching == True:
-        rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
+      if self.__faceKeepSearching == True and self.__searchState == -1:
+	self.Search(self.__faceTagNr)
       
       self.__faceLostCounter += 1
       if self.__faceLostCounter % int(CONTROLLRATE) == 0:	# 1Hz
@@ -670,8 +663,8 @@ class Commands:
       angle = SEARCH[self.__searchState]
       print('Yaw ' + str(angle))
       self.__aim['az'] = angle/math.fabs(angle) * self.__yawSpeed
-      durationRecall = rospy.Duration(math.fabs(angle)/100 + 0.5) # waiting as long as turn lasts (same code as in Yaw +0.5s)
-      durationStop = rospy.Duration(math.fabs(angle)/100) # waiting as long as turn lasts (same code as in Yaw)
+      durationRecall = rospy.Duration(math.fabs(angle)/(100*self.__yawSpeed) + 1.0) # waiting as long as turn lasts (same code as in Yaw +1.0s)
+      durationStop = rospy.Duration(math.fabs(angle)/(100*self.__yawSpeed)) # waiting as long as turn lasts (same code as in Yaw)
       
       # repeat self.__searchState = (self.__searchState + 1) % 7
       self.__searchState = (self.__searchState + 1)

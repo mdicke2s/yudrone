@@ -30,11 +30,8 @@ class joypad_ctrl():
   
   def __init__(self):
     '''
-    Constructor initializes
-    * joy_node
-    * own node
-    '''
-    
+    Constructor 
+    '''    
     JOYPAD = rospy.get_param("joy_node/dev")
     joypadConnected = os.system('test -e ' + JOYPAD)
     if joypadConnected != 0:
@@ -49,7 +46,7 @@ class joypad_ctrl():
       rospy.loginfo('joynode is running')
     
     rospy.init_node('yudrone_joy')
-    self.lock = False
+    self.hasControl = True
     
     #publishers
     self.pub_land = rospy.Publisher( "ardrone/land", Empty )
@@ -59,19 +56,21 @@ class joypad_ctrl():
     
     #subscribers
     self.sub_joy = rospy.Subscriber( "joy", Joy, self.handle_joy )
-    self.sub_lock = rospy.Subscriber( "/yudrone/lock_joypad", Bool, self.handle_lock )
+    self.sub_twist = rospy.Subscriber( "yudrone/cmd_vel", Twist, self.handle_twist )
     rospy.sleep(0.1)
     
     rospy.loginfo('joypad_ctrl initialized')
-    
-  def handle_lock(self, msg):
-    if msg.data == True:
-      self.lock = True
-      rospy.loginfo('gamepad locked')
+  
+  def handle_twist(self, twist):
+    '''
+    Callback function for incomming twist msgs
+    will be forwarded to ardrone only if gamepad does not have exclusive control
+    '''
+    if self.hasControl == False:
+      self.pub_yaw.publish(twist)
     else:
-      self.lock = False
-      rospy.loginfo('gamepad unlocked')
-    
+      rospy.logwarn('ardrone controlled by gamepad: twist was not sent')
+      
   def handle_joy(self, joy):
     '''
     Callback function for incomming joypad commands
@@ -82,24 +81,29 @@ class joypad_ctrl():
       self.pub_takeoff.publish( Empty() )
       rospy.sleep(0.1)
     # btn nr 2 for land
-    if joy.buttons[1]==1:
+    elif joy.buttons[1]==1:
       rospy.loginfo('land command')
       self.pub_land.publish( Empty() )
       rospy.sleep(0.1)
     # btn nr 1 for emergency
-    if joy.buttons[0]==1:
+    elif joy.buttons[0]==1:
       rospy.loginfo('emergency mode toggled')
       self.pub_emergency.publish( Empty() )
       rospy.sleep(0.1)
     # btn nr 3 for stop
-    if joy.buttons[2]==1:
-      yaw = Twist()
-      rospy.loginfo('stop twist')
-      self.pub_yaw.publish(yaw)
-      # TODO add suificcient stop for commands
+    elif joy.buttons[2]==1:
+      if self.hasControl == False:
+	self.hasControl = True
+	yaw = Twist()
+	self.pub_yaw.publish(yaw)
+	rospy.loginfo('gamepad has full control')
+      else:
+	self.hasControl = False
+	rospy.loginfo('twist is conntrolled by commands')
+	
       
     # joysticks  
-    if self.lock == False:
+    elif self.hasControl == True:
       # set yaw parameter
       yaw = Twist()
       yaw.angular.x = yaw.angular.y = 0
