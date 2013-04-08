@@ -66,13 +66,13 @@ Schedule:
   </tr>
   <tr>
     <td>Mo 8</td>
-    <td>10am-5pm</td>
-    <td>modified yudrone_cmd was tested,<br/>experimental run successfull</td>
+    <td>10am-4pm</td>
+    <td></td>
   </tr>
   <tr>
-    <td>Tu 9</td>
-    <td>8am-2pm</td>
-    <td></td>
+    <td>Tu 9 or We 10</td>
+    <td>8am-6pm</td>
+    <td>experimental run successfull</td>
   </tr>
   <tr>
     <td>Th 11</td>
@@ -82,11 +82,11 @@ Schedule:
   <tr>
     <td>Fr 12</td>
     <td>8am-5pm</td>
-    <td></td>
+    <td>video</td>
   </tr>
   <tr>
     <td>Weekend</td>
-    <td>???</td>
+    <td>poster</td>
     <td></td>
   </tr>
   <tr>
@@ -97,7 +97,7 @@ Schedule:
   <tr>
     <td>Tu 16</td>
     <td>8am-5pm</td>
-    <td></td>
+    <td>poster printed</td>
   </tr>
 </table>
 
