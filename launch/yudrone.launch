@@ -1,4 +1,13 @@
 <launch>
+	<rosparam param="joy_node/dev">/dev/input/js1</rosparam>
+	<rosparam param="yudrone/ARDRONE_IP">192.168.1.1</rosparam>
+	<rosparam param="yudrone/ROSDIR">/opt/ros/fuerte/bin/</rosparam>
+	<rosparam param="yudrone/ARRECOGDIR">/home/viki/ros_workspace/ar_recog/bin</rosparam>
+	<rosparam param="aov">0.67</rosparam>
+	<rosparam param="yudrone/maxAltitude">2000</rosparam>
+	<rosparam param="yudrone/minAltitude">100</rosparam>
+	<rosparam param="yudrone/yawSpeed">100</rosparam>
+	<rosparam param="yudrone/hrzSpeed">100</rosparam>
 	<node name="yudrone_param" pkg="yudrone" type="setDefaultParameter.py" output="screen" />
 	<node name="ardrone_driver" pkg="ardrone_autonomy" type="ardrone_driver" output="screen" clear_params="true">
 	<!-- ardrone sample launch

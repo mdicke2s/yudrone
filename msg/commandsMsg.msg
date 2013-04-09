@@ -62,9 +62,17 @@ int32 yawSpeed
 bool hasHrzSpeed
 int32 hrzSpeed
 
+# TakeOff(self, tagNr=None) **************************************************
+bool hasTakeoff
+# int32 tagNr already defined
+
+# Land(self, tagNr=None) *****************************************************
+bool hasLand
+# int32 tagNr already defined
+
 # __unlock(self) *************************************************************
 bool forceUnlock
 
 # not implemented by now...
-# TakeOff(self): Land(self): ToggleEmerg(self) *******************************
+# ToggleEmerg(self) *******************************
 # __reset_twist(self, delay = 0) *********************************************

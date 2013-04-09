@@ -543,7 +543,7 @@ class Flight(wx.Frame):
       self.txtAltd.SetLabel('Altitude (mm):\t%d' %navdata.altd)
       self.txtRotation.SetLabel('Rotation:\t\t\tX:%d\tY:%d\tZ:%d' %(navdata.rotX, navdata.rotY, navdata.rotZ))
       self.txtMagnetometer.SetLabel('Magnetometer:\tX:%d\tY:%d\tZ:%d' %(navdata.magX, navdata.magY, navdata.magZ))
-      self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.2f\tLY:%.2f\tLZ:%.2f\tAZ:%.2f' %(self.currYaw.linear.x, self.currYaw.linear.y, self.currYaw.linear.z, self.currYaw.angular.z))
+      self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.3f\tLY:%.3f\tLZ:%.3f\tAZ:%.3f' %(self.currYaw.linear.x, self.currYaw.linear.y, self.currYaw.linear.z, self.currYaw.angular.z))
       self.droneState = navdata.state
       
       if self.__plotRot == True:

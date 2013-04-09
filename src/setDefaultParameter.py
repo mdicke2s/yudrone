@@ -15,7 +15,7 @@ import rospy
 
 def setDefaultParameter():
   # set default parameter for yudrone
-  rospy.set_param("joy_node/dev", '/dev/input/js2')
+  rospy.set_param("joy_node/dev", '/dev/input/js1')
   rospy.set_param('yudrone/ARDRONE_IP', '192.168.1.1')
   rospy.set_param('yudrone/ROSDIR', "/opt/ros/fuerte/bin/")
   rospy.set_param('yudrone/ARRECOGDIR', '/home/viki/ros_workspace/ar_recog/bin')
