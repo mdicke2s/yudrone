@@ -53,55 +53,77 @@ Schedule:
     <th>Day</th>
     <th>Time</th>
     <th>goal</th>
+    <th>done</th>
   </tr>
   <tr>
     <td>Fr 5</td>
     <td>8am-3pm</td>
     <td>state machine and yudrone_cmd are joined</td>
+    <td>done for face and search</td>
   </tr>
   <tr>
     <td>Weekend</td>
-    <td>???</td>
+    <td></td>
     <td>in yudrone_cmd: timers are substituted with event-queue</td>
+    <td>skipped, changed yaw control instaed</td>
   </tr>
   <tr>
     <td>Mo 8</td>
     <td>10am-4pm</td>
-    <td></td>
+    <td>PID controller and setup</td>
+    <td>done</td>
   </tr>
   <tr>
-    <td>Tu 9 or We 10</td>
-    <td>8am-6pm</td>
-    <td>experimental run successfull</td>
+    <td>Tu 9</td>
+    <td>8am-4pm</td>
+    <td>enrich state machine<br/>implement approach</td>
+    <td></td>
   </tr>
   <tr>
     <td>Th 11</td>
     <td>3am-6pm</td>
     <td>box(es) build and tags printed</td>
+    <td></td>
   </tr>
   <tr>
     <td>Fr 12</td>
     <td>8am-5pm</td>
-    <td>video</td>
+    <td>experimental run successfull, video</td>
+    <td></td>
   </tr>
   <tr>
     <td>Weekend</td>
     <td>poster</td>
+    <td></td>
     <td></td>
   </tr>
   <tr>
     <td>Mo 15</td>
     <td>8am-5pm</td>
     <td></td>
+    <td></td>
   </tr>
   <tr>
     <td>Tu 16</td>
     <td>8am-5pm</td>
     <td>poster printed</td>
+    <td></td>
   </tr>
 </table>
 
 Notes:
+Approach target is supposed to work like this
+* face and wait for sum of errors to be low (stable position at 1600mm distance)
+* gently decrease distance
+ * best case until tag fills video frame
+ * use PID controller on ax (yaw)
+* go on top
+ * swicht to bottom camera
+ * elevate until tag in range
+ * hover to certain altitude using controller on lx and ly
+If we are on top of a target we can do a search which is cleverer than the current one, but we can also hover on top and use predefined graph to determine the next tags position.
+
+Helpful commands:
 ```sh
 #ardrone_autonomy cli
 rosrun ardrone_autonomy ardrone_driver [-ip x.x.x.x]
