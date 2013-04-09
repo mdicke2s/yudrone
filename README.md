@@ -74,14 +74,16 @@ Schedule:
     <td>done</td>
   </tr>
   <tr>
-    <td>Tu 9 or We 10</td>
-    <td>8am-6pm</td>
+    <td>Tu 9</td>
+    <td>8am-4pm</td>
+    <td>enrich state machine<br/>implement approach</td>
     <td></td>
   </tr>
   <tr>
     <td>Th 11</td>
     <td>3am-6pm</td>
     <td>box(es) build and tags printed</td>
+    <td></td>
   </tr>
   <tr>
     <td>Fr 12</td>
