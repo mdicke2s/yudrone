@@ -189,6 +189,8 @@ class Commands:
       self.pub_cmdStatus.publish(status)
 
     elif self.__lockNr != -1:
+      status = commandStatus(id=self.__lockNr, isLocked=True, status="done")
+      rospy.loginfo('Status turned to "done" (%i)'%self.__lockNr)
       # dissolve lock and announce availability
       self.__lockNr = -1
       status = commandStatus(id=-1, isLocked=False, status="available")
@@ -343,7 +345,7 @@ class Commands:
       #stop lifting
       rospy.loginfo('reached altitude @ %i'%reading1)
       self.__onResetSilent()
-      self.__unlock("done_sucessfully")
+      self.__unlock("altitude command sucessfully")
     else:
       #call again
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__altdStop, oneshot=True)
@@ -829,12 +831,12 @@ class Commands:
       self.__approachTagNr = tagNr
       self.__lastApproachTagDistance = 99999999
       self.__approachTagLostCounter = 0
-      self.__approachStep = 0
+      #self.__approachStep = 0
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onApproach, oneshot=True)
 
   def __onApproach(self, event=None):
-    # step 0: gently comming closer ........................
-    if self.__approachStep == 0:
+      # step 0: gently comming closer ........................
+      #if self.__approachStep == 0:
       facedTag = self.getTag(self.__approachTagNr)
 
       if facedTag.diameter == 0:
@@ -856,15 +858,16 @@ class Commands:
       if self.__approachTagLostCounter > 4:
     	# tag is lost for some frames
     	rospy.loginfo("Approach stopped. Eastimated distance is %i"%self.__lastApproachTagDistance)
-    	self.__approachStep = 1
+    	#self.__approachStep = 1
+    	self.__unlock("approach done")
       else:
     	# call again
     	rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onApproach, oneshot=True)
 
     # step 1: go on top of the box
-    if self.__approachStep == 1:
-        self.__aim['lx'] = 0.1
-        self.__aim['']
+    #if self.__approachStep == 1:
+    #    self.__aim['lx'] = 0.1
+    #    self.__aim['']
 
   def Navigate(self, x, y, z, xRot, yRot, zRot):
     '''

@@ -39,8 +39,8 @@ class ydState(smach.State):
 	rospy.loginfo("communicationState initialized")
 	
         # initialize tag order
-        ydState.tagNrList=(11, 18)
-        ydState.tagAltdList=(600,600)
+        ydState.tagNrList=(1, 6)
+        ydState.tagAltdList=(500,700)
         ydState.tagPointer = -1
 
     def getTagNr(self):
@@ -59,8 +59,8 @@ class ydState(smach.State):
       return
       
     @abc.abstractmethod
-    def cleanReturn(self, msg):
-      # reset state variables and return the return msg
+    def clean(self):
+      # reset state variables
       # intended for transitions that exit the state to go to another state
       return
       
@@ -74,52 +74,52 @@ class ydState(smach.State):
 class GetNode(ydState):
     def __init__(self):
         ydState.__init__(self)
-        smach.State.__init__(self, outcomes=['no_node','acquired_node', 'land', 'take_off'], output_keys=['tagNr'])
-        
+        smach.State.__init__(self, outcomes=['no_node','acquired_node', 'land', 'take_off'], output_keys=['tagNr'])      
 
     def execute(self, userdata):
 	rospy.sleep(0.5)
 	self.checkCmdNode()
         if False:
-	  return self.cleanReturn('no_node')
+	  self.clean()
+	  return 'no_node'
         else:
 	  self.setToNextTag()
 	  userdata.tagNr = self.getTagNr()
-	  return self.cleanReturn('acquired_node')
+	  self.clean()
+	  return 'acquired_node'
             
     def handleStatus(self, msg):
       return
       
-    def cleanReturn(self, msg='no_node'):
-      return msg
+    def clean(self):
+      return
       
 ''' define TakeOff state ******************************************************'''
 class TakeOffNode(ydState):
     def __init__(self):
         ydState.__init__(self)
-        smach.State.__init__(self, outcomes=['taking_off','in_flight'], output_keys=['tagNr'])
-        
+        smach.State.__init__(self, outcomes=['taking_off','in_flight'], output_keys=['tagNr'])  
 
     def execute(self, userdata):
 	userdata.tagNr = self.getTagNr()
 	self.checkCmdNode()
         if True:
-            return self.cleanReturn('in_flight')
+	  self.clean()
+	  return 'in_flight'
         else:
-            return 'taking_off'
+          return 'taking_off'
             
     def handleStatus(self, msg):
       return
     
-    def cleanReturn(self, msg):
-      return msg
+    def clean(self):
+      return
       
 ''' define Landing state ******************************************************'''
 class LandingNode(ydState):
     def __init__(self):
         ydState.__init__(self)
-        smach.State.__init__(self, outcomes=['landing','landed'], output_keys=['tagNr'])
-        
+        smach.State.__init__(self, outcomes=['landing','landed'], output_keys=['tagNr'])   
 
     def execute(self, userdata):
 	userdata.tagNr = self.getTagNr()
@@ -127,23 +127,21 @@ class LandingNode(ydState):
         if False:
             return 'landing'
         else:
-            return self.cleanReturn('landed')
+	    self.clean()
+            return 'landed'
             
     def handleStatus(self, msg):
       return
     
-    def cleanReturn(self, msg):
-      return msg
+    def clean(self):
+      return
 
 ''' define searchNode state ******************************************************'''
 class SearchNode(ydState):
     def __init__(self):
         ydState.__init__(self)
         smach.State.__init__(self, outcomes=['still_lost','acquired_node', 'gave_up'], output_keys=['tagNr'])
-        self.searchIsRunning = False
-        self.commandID = -1
-        self.searchTrys = 0
-        
+        self.clean() 
         m = commandsMsg()
         self.pubCommands.publish(m) # send empty message as initialization
     
@@ -172,9 +170,11 @@ class SearchNode(ydState):
 	
 	rospy.sleep(0.5)
 	if self.hasAcquiredNode == True:
-          return self.cleanReturn('acquired_node')
+          self.clean()
+          return 'acquired_node'
         elif self.giveUp == True:
-	  return self.cleanReturn('gave_up')
+	  self.clean()
+	  return 'gave_up'
         else:
           return 'still_lost'
     
@@ -195,22 +195,19 @@ class SearchNode(ydState):
         # search was finished successfully
         self.hasAcquiredNode = True
 
-    def cleanReturn(self, msg):
+    def clean(self):
       self.searchIsRunning = False
       self.hasAcquiredNode = False
       self.giveUp = False
       self.searchTrys = 0
-      return msg
+      self.commandID = -1
 
 ''' define faceNode state ******************************************************'''
 class FaceNode(ydState):
     def __init__(self):
         ydState.__init__(self)
         smach.State.__init__(self, outcomes=['lost','done', 'control'], output_keys=['tagNr'])
-        self.faceIsRunning = False
-        self.commandID = -1
-        self.isLost = False # need to search for tag
-        self.isFacing_stable = False # within error parameters and ready to finish facing command
+        self.clean()
         
         m = commandsMsg()
         self.pubCommands.publish(m) # send empty message as initialization
@@ -235,13 +232,15 @@ class FaceNode(ydState):
 	
 	rospy.sleep(0.5)
 	if self.isLost == True:
-	  return self.cleanReturn('lost')
+	  self.clean()
+	  return 'lost'
 	elif self.isFacing_stable == True:
 	  #send out release message
 	  m = commandsMsg()
 	  m.hasRelease = True
 	  self.pubCommands.publish(m)
-          return self.cleanReturn('done')
+          self.clean()
+          return 'done'
         else:
           return 'control'
     
@@ -255,32 +254,77 @@ class FaceNode(ydState):
 	  # face was finished without success
 	  self.faceIsRunning = False
 	  self.isLost = True
-        if msg.id == self.commandID and msg.status == "face stable":
+        if msg.status == "face stable":
 	  # search was finished successfully
 	  self.isFacing_stable = True
 	  
-    def cleanReturn(self, msg):
+    def clean(self):
       self.faceIsRunning = False
-      self.isFacing_stable = False
-      self.isLost = False
-      return msg
+      self.commandID = -1
+      self.isLost = False # need to search for tag
+      self.isFacing_stable = False # within error parameters and ready to finish facing command
       
 ''' define TargetApproachNode state ******************************************************'''
 class TargetApproachNode(ydState):
     def __init__(self):
         ydState.__init__(self)
         smach.State.__init__(self, outcomes=['still_tracking','in_range','lost'], output_keys=['tagNr'])
+        self.clean()
     
+    '''
+    executes
+    * approach which brings drone closer
+    * altd(+500)
+    * horizontal(x=100)
+    '''
     def execute(self, userdata):
 	userdata.tagNr = self.getTagNr()
 	self.checkCmdNode()
-	return 'in_range'
+	if self.approachState == "initialized": # call approach
+	  self.approachState = "approach running"
+	  m=commandsMsg()
+	  m.hasApproach=True
+	  m.tagNr=self.getTagNr()
+	  self.pubCommands.publish(m)
+	  self.commandID = m.header.seq
+	  rospy.loginfo("approach command submitted: id = %i"%self.commandID)
+	elif self.approachState == "approach done": # call altitude
+	  self.approachState = "altitude running"
+	  m=commandsMsg()
+	  m.hasAltdDelta=True
+	  m.altdDelta=500
+	  self.pubCommands.publish(m)
+	  self.commandID = m.header.seq
+	  rospy.loginfo("altitude command submitted: id = %i"%self.commandID)
+	elif self.approachState == "altitude done": # call horizontal
+	  self.approachState = "horizontal running"
+	  m=commandsMsg()
+	  m.hasHorizontal=True
+	  m.horizontalX=100
+	  m.horizontalY=0
+	  self.pubCommands.publish(m)
+	  self.commandID = m.header.seq
+	  rospy.loginfo("horizontal command submitted: id = %i"%self.commandID)	  
+	elif self.approachState == "horizontal done":
+	  self.clean()
+	  return 'in_range'
+	rospy.loginfo("Approchestate = %s"%self.approachState)
+	#rospy.sleep(0.2)
+	return 'still_tracking'
             
     def handleStatus(self, msg):
-      return
+      if msg.status == "approach done" and self.approachState == "approach running":
+	self.approachState = "approach done"
+      if msg.status == 'altitude command sucessfully' and self.approachState == "altitude running":
+	self.approachState = "altitude done"
+      if (msg.id == self.commandID and msg.status == 'done' and self.approachState == "horizontal running") or \
+	 (msg.status == 'available'and self.approachState == "horizontal running"):
+	self.approachState = "horizontal done"
 
-    def cleanReturn(self, msg):
-      return msg
+    def clean(self):
+      self.commandID = -1
+      #self.approachState = "initialized"
+      self.approachState = "horizontal done" # skip complete approach state
       
 ''' define DockNode state ******************************************************'''
 class DockNode(ydState):
@@ -299,8 +343,8 @@ class DockNode(ydState):
     def handleStatus(self, msg):
       return
       
-    def cleanReturn(self, msg):
-      return msg
+    def clean(self):
+      return
 
 ''' define HoverNode state ******************************************************'''
 class HoverNode(ydState):
@@ -314,9 +358,9 @@ class HoverNode(ydState):
             
     def handleStatus(self, msg):
       return
-      
-    def cleanReturn(self, msg):
-      return msg
+
+    def clean(self):
+      return 
 
 
 ''' main function ******************************************************'''
