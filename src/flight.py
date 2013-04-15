@@ -35,7 +35,7 @@ roslib.load_manifest('yudrone')
 import rospy
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Empty, String, Bool
-from sensor_msgs.msg import Joy, Image
+from sensor_msgs.msg import Image
 from ardrone_autonomy.msg import Navdata
 from ar_recog.msg import Tags, Tag
 
@@ -105,12 +105,6 @@ class Flight(wx.Frame):
     self.rbOff.Bind(wx.EVT_RADIOBUTTON, self.OnRBVideo)
     self.rbOff.SetValue(True)
     
-    self.rbJoypad = wx.RadioButton(self, 0, 'joypad-only', style=wx.RB_GROUP)
-    self.rbConsole = wx.RadioButton(self, 0, 'console')
-    self.rbJoypad.Bind(wx.EVT_RADIOBUTTON, self.OnRBInput) 
-    self.rbConsole.Bind(wx.EVT_RADIOBUTTON, self.OnRBInput)
-    self.rbJoypad.SetValue(True)
-    
     self.CommandList = ['Altitude(', 'MaxAltd(', 'MinAltd(', 'Yaw(', 'YawSpeed(',
 		 'Horizontal(', 'HrzSpeed(', 'TakeOff()', 'Land()',
 		 'Pause()', 'Continue()', 'Break()', 'Batch(', 'Exit()',
@@ -124,8 +118,6 @@ class Flight(wx.Frame):
     sizeRadioBtn1.Add(self.rbFront, 0, wx.ALL, 0)
     sizeRadioBtn1.Add(self.rbBottom, 0, wx.ALL, 0)
     sizeRadioBtn1.Add(self.rbOff, 0, wx.ALL, 0)
-    sizeRadioBtn2.Add(self.rbJoypad, 0, wx.ALL, 0)
-    sizeRadioBtn2.Add(self.rbConsole, 0, wx.ALL, 0)
     
     sizeLeft.Add(wx.StaticText(self), 0, wx.ALL, 0) #spacer
     sizeLeft.Add(self.imageView, 0 ,wx.ALL, 10)
@@ -396,7 +388,6 @@ class Flight(wx.Frame):
     
     #publishers
     self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )		# toggle ardrone emergency state
-    self.pub_lockJoy = rospy.Publisher( "/yudrone/lock_joypad", Bool )	# lock axis of joypad
     
     #subscribers
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
@@ -409,7 +400,6 @@ class Flight(wx.Frame):
     self.camState='front' # initially the camera is set to front on ardrone
     
     #stage 7: finalize ............................................
-    self.OnRBInput()
     self.OnRBVideo()
     self.currYaw = Twist()
     rospy.loginfo('ROS initialized')
@@ -553,7 +543,7 @@ class Flight(wx.Frame):
       self.txtAltd.SetLabel('Altitude (mm):\t%d' %navdata.altd)
       self.txtRotation.SetLabel('Rotation:\t\t\tX:%d\tY:%d\tZ:%d' %(navdata.rotX, navdata.rotY, navdata.rotZ))
       self.txtMagnetometer.SetLabel('Magnetometer:\tX:%d\tY:%d\tZ:%d' %(navdata.magX, navdata.magY, navdata.magZ))
-      self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.2f\tLY:%.2f\tLZ:%.2f\tAZ:%.2f' %(self.currYaw.linear.x, self.currYaw.linear.y, self.currYaw.linear.z, self.currYaw.angular.z))
+      self.txtAim.SetLabel('Aim:\t\t\t\tLX:%.3f\tLY:%.3f\tLZ:%.3f\tAZ:%.3f' %(self.currYaw.linear.x, self.currYaw.linear.y, self.currYaw.linear.z, self.currYaw.angular.z))
       self.droneState = navdata.state
       
       if self.__plotRot == True:
@@ -584,32 +574,7 @@ class Flight(wx.Frame):
     
   '''************************************************************************************************************************
   INPUT
-  ************************************************************************************************************************'''
-  def OnRBInput(self, event='NONE'):
-    '''
-    Callback function for changing input radiobuttons
-    '''
-    if self.rbJoypad.GetValue() == True:
-      rospy.loginfo('Input set to joypad')
-      self.rbFront.Enable()
-      self.rbBottom.Enable()
-      self.rbOff.Enable()
-      self.cmdShell.Disable()
-      self.cmbCommands.Disable()
-      self.pub_lockJoy.publish(False)
-      if not self.shell is None:
-        self.shell.updateNavSwitch(False)
-    else:
-      rospy.loginfo('Input set to console')
-      self.rbFront.Disable()
-      self.rbBottom.Disable()
-      self.rbOff.Disable()
-      self.cmdShell.Enable()
-      self.cmbCommands.Enable()
-      self.pub_lockJoy.publish(True)
-      if not self.shell is None:
-        self.shell.updateNavSwitch(True)
-    
+  ************************************************************************************************************************'''    
   def OnSelectCmd(self, event):    
     '''
     Callback function for selecting command from combobox

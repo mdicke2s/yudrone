@@ -8,7 +8,7 @@ import geometry_msgs.msg
 import std_msgs.msg
 
 class commandsMsg(genpy.Message):
-  _md5sum = "35dbbcc6aa4842e9ba719e959ccc6b35"
+  _md5sum = "25b39a7acde7a8f6da43636457a450b3"
   _type = "yudrone/commandsMsg"
   _has_header = True #flag to mark the presence of a Header object
   _full_text = """Header header
@@ -27,8 +27,12 @@ bool hasTwist
 geometry_msgs/Twist twist
 
 # Altitude(self, delta) ******************************************************
-bool hasAltd
-int32 altd
+bool hasAltdDelta
+int32 altdDelta
+
+# Altitude(self, abs) *******************************************************
+bool hasAltdAbs
+int32 altdAbs
 
 # MaxAltd(self, val) *********************************************************
 bool hasMaxAltd
@@ -55,9 +59,10 @@ int32 tagNr
 # Release(self) **************************************************************
 bool hasRelease
 
-# Search(self, tagNr) ********************************************************
+# Search(self, tagNr, startAltd=0) *******************************************
 bool hasSearch
 # int32 tagNr already defined
+int32 searchStartAltd
 
 # Approach(self, tagNr) ******************************************************
 bool hasApproach
@@ -75,11 +80,20 @@ int32 yawSpeed
 bool hasHrzSpeed
 int32 hrzSpeed
 
+# TakeOff(self, tagNr=None) **************************************************
+bool hasTakeoff
+# int32 tagNr already defined
+
+# Land(self, tagNr=None) *****************************************************
+bool hasLand
+# int32 tagNr already defined
+
+# __unlock(self) *************************************************************
+bool forceUnlock
+
 # not implemented by now...
-# TakeOff(self): Land(self): ToggleEmerg(self) *******************************
+# ToggleEmerg(self) *******************************
 # __reset_twist(self, delay = 0) *********************************************
-
-
 ================================================================================
 MSG: std_msgs/Header
 # Standard metadata for higher-level stamped data types.
@@ -112,8 +126,8 @@ float64 x
 float64 y
 float64 z
 """
-  __slots__ = ['header','hasTwist','twist','hasAltd','altd','hasMaxAltd','MaxAltd','hasMinAltd','MixAltd','hasYaw','yaw','hasHorizontal','horizontalX','horizontalY','hasFace','tagNr','hasRelease','hasSearch','hasApproach','hasNavigate','nav_XYZ_RxRyRz','hasYawSpeed','yawSpeed','hasHrzSpeed','hrzSpeed']
-  _slot_types = ['std_msgs/Header','bool','geometry_msgs/Twist','bool','int32','bool','int32','bool','int32','bool','int32','bool','int32','int32','bool','int32','bool','bool','bool','bool','int32[]','bool','int32','bool','int32']
+  __slots__ = ['header','hasTwist','twist','hasAltdDelta','altdDelta','hasAltdAbs','altdAbs','hasMaxAltd','MaxAltd','hasMinAltd','MixAltd','hasYaw','yaw','hasHorizontal','horizontalX','horizontalY','hasFace','tagNr','hasRelease','hasSearch','searchStartAltd','hasApproach','hasNavigate','nav_XYZ_RxRyRz','hasYawSpeed','yawSpeed','hasHrzSpeed','hrzSpeed','hasTakeoff','hasLand','forceUnlock']
+  _slot_types = ['std_msgs/Header','bool','geometry_msgs/Twist','bool','int32','bool','int32','bool','int32','bool','int32','bool','int32','bool','int32','int32','bool','int32','bool','bool','int32','bool','bool','int32[]','bool','int32','bool','int32','bool','bool','bool']
 
   def __init__(self, *args, **kwds):
     """
@@ -123,7 +137,7 @@ float64 z
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       header,hasTwist,twist,hasAltd,altd,hasMaxAltd,MaxAltd,hasMinAltd,MixAltd,hasYaw,yaw,hasHorizontal,horizontalX,horizontalY,hasFace,tagNr,hasRelease,hasSearch,hasApproach,hasNavigate,nav_XYZ_RxRyRz,hasYawSpeed,yawSpeed,hasHrzSpeed,hrzSpeed
+       header,hasTwist,twist,hasAltdDelta,altdDelta,hasAltdAbs,altdAbs,hasMaxAltd,MaxAltd,hasMinAltd,MixAltd,hasYaw,yaw,hasHorizontal,horizontalX,horizontalY,hasFace,tagNr,hasRelease,hasSearch,searchStartAltd,hasApproach,hasNavigate,nav_XYZ_RxRyRz,hasYawSpeed,yawSpeed,hasHrzSpeed,hrzSpeed,hasTakeoff,hasLand,forceUnlock
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -138,10 +152,14 @@ float64 z
         self.hasTwist = False
       if self.twist is None:
         self.twist = geometry_msgs.msg.Twist()
-      if self.hasAltd is None:
-        self.hasAltd = False
-      if self.altd is None:
-        self.altd = 0
+      if self.hasAltdDelta is None:
+        self.hasAltdDelta = False
+      if self.altdDelta is None:
+        self.altdDelta = 0
+      if self.hasAltdAbs is None:
+        self.hasAltdAbs = False
+      if self.altdAbs is None:
+        self.altdAbs = 0
       if self.hasMaxAltd is None:
         self.hasMaxAltd = False
       if self.MaxAltd is None:
@@ -168,6 +186,8 @@ float64 z
         self.hasRelease = False
       if self.hasSearch is None:
         self.hasSearch = False
+      if self.searchStartAltd is None:
+        self.searchStartAltd = 0
       if self.hasApproach is None:
         self.hasApproach = False
       if self.hasNavigate is None:
@@ -182,12 +202,20 @@ float64 z
         self.hasHrzSpeed = False
       if self.hrzSpeed is None:
         self.hrzSpeed = 0
+      if self.hasTakeoff is None:
+        self.hasTakeoff = False
+      if self.hasLand is None:
+        self.hasLand = False
+      if self.forceUnlock is None:
+        self.forceUnlock = False
     else:
       self.header = std_msgs.msg.Header()
       self.hasTwist = False
       self.twist = geometry_msgs.msg.Twist()
-      self.hasAltd = False
-      self.altd = 0
+      self.hasAltdDelta = False
+      self.altdDelta = 0
+      self.hasAltdAbs = False
+      self.altdAbs = 0
       self.hasMaxAltd = False
       self.MaxAltd = 0
       self.hasMinAltd = False
@@ -201,6 +229,7 @@ float64 z
       self.tagNr = 0
       self.hasRelease = False
       self.hasSearch = False
+      self.searchStartAltd = 0
       self.hasApproach = False
       self.hasNavigate = False
       self.nav_XYZ_RxRyRz = []
@@ -208,6 +237,9 @@ float64 z
       self.yawSpeed = 0
       self.hasHrzSpeed = False
       self.hrzSpeed = 0
+      self.hasTakeoff = False
+      self.hasLand = False
+      self.forceUnlock = False
 
   def _get_types(self):
     """
@@ -230,13 +262,13 @@ float64 z
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
       _x = self
-      buff.write(_struct_B6dBiBiBiBiB2iBi4B.pack(_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltd, _x.altd, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.hasApproach, _x.hasNavigate))
+      buff.write(_struct_B6dBiBiBiBiBiB2iBi2Bi2B.pack(_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltdDelta, _x.altdDelta, _x.hasAltdAbs, _x.altdAbs, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.searchStartAltd, _x.hasApproach, _x.hasNavigate))
       length = len(self.nav_XYZ_RxRyRz)
       buff.write(_struct_I.pack(length))
       pattern = '<%si'%length
       buff.write(struct.pack(pattern, *self.nav_XYZ_RxRyRz))
       _x = self
-      buff.write(_struct_BiBi.pack(_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed))
+      buff.write(_struct_BiBi3B.pack(_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed, _x.hasTakeoff, _x.hasLand, _x.forceUnlock))
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -266,10 +298,11 @@ float64 z
         self.header.frame_id = str[start:end]
       _x = self
       start = end
-      end += 87
-      (_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltd, _x.altd, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.hasApproach, _x.hasNavigate,) = _struct_B6dBiBiBiBiB2iBi4B.unpack(str[start:end])
+      end += 96
+      (_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltdDelta, _x.altdDelta, _x.hasAltdAbs, _x.altdAbs, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.searchStartAltd, _x.hasApproach, _x.hasNavigate,) = _struct_B6dBiBiBiBiBiB2iBi2Bi2B.unpack(str[start:end])
       self.hasTwist = bool(self.hasTwist)
-      self.hasAltd = bool(self.hasAltd)
+      self.hasAltdDelta = bool(self.hasAltdDelta)
+      self.hasAltdAbs = bool(self.hasAltdAbs)
       self.hasMaxAltd = bool(self.hasMaxAltd)
       self.hasMinAltd = bool(self.hasMinAltd)
       self.hasYaw = bool(self.hasYaw)
@@ -288,10 +321,13 @@ float64 z
       self.nav_XYZ_RxRyRz = struct.unpack(pattern, str[start:end])
       _x = self
       start = end
-      end += 10
-      (_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed,) = _struct_BiBi.unpack(str[start:end])
+      end += 13
+      (_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed, _x.hasTakeoff, _x.hasLand, _x.forceUnlock,) = _struct_BiBi3B.unpack(str[start:end])
       self.hasYawSpeed = bool(self.hasYawSpeed)
       self.hasHrzSpeed = bool(self.hasHrzSpeed)
+      self.hasTakeoff = bool(self.hasTakeoff)
+      self.hasLand = bool(self.hasLand)
+      self.forceUnlock = bool(self.forceUnlock)
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
@@ -313,13 +349,13 @@ float64 z
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
       _x = self
-      buff.write(_struct_B6dBiBiBiBiB2iBi4B.pack(_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltd, _x.altd, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.hasApproach, _x.hasNavigate))
+      buff.write(_struct_B6dBiBiBiBiBiB2iBi2Bi2B.pack(_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltdDelta, _x.altdDelta, _x.hasAltdAbs, _x.altdAbs, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.searchStartAltd, _x.hasApproach, _x.hasNavigate))
       length = len(self.nav_XYZ_RxRyRz)
       buff.write(_struct_I.pack(length))
       pattern = '<%si'%length
       buff.write(self.nav_XYZ_RxRyRz.tostring())
       _x = self
-      buff.write(_struct_BiBi.pack(_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed))
+      buff.write(_struct_BiBi3B.pack(_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed, _x.hasTakeoff, _x.hasLand, _x.forceUnlock))
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -350,10 +386,11 @@ float64 z
         self.header.frame_id = str[start:end]
       _x = self
       start = end
-      end += 87
-      (_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltd, _x.altd, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.hasApproach, _x.hasNavigate,) = _struct_B6dBiBiBiBiB2iBi4B.unpack(str[start:end])
+      end += 96
+      (_x.hasTwist, _x.twist.linear.x, _x.twist.linear.y, _x.twist.linear.z, _x.twist.angular.x, _x.twist.angular.y, _x.twist.angular.z, _x.hasAltdDelta, _x.altdDelta, _x.hasAltdAbs, _x.altdAbs, _x.hasMaxAltd, _x.MaxAltd, _x.hasMinAltd, _x.MixAltd, _x.hasYaw, _x.yaw, _x.hasHorizontal, _x.horizontalX, _x.horizontalY, _x.hasFace, _x.tagNr, _x.hasRelease, _x.hasSearch, _x.searchStartAltd, _x.hasApproach, _x.hasNavigate,) = _struct_B6dBiBiBiBiBiB2iBi2Bi2B.unpack(str[start:end])
       self.hasTwist = bool(self.hasTwist)
-      self.hasAltd = bool(self.hasAltd)
+      self.hasAltdDelta = bool(self.hasAltdDelta)
+      self.hasAltdAbs = bool(self.hasAltdAbs)
       self.hasMaxAltd = bool(self.hasMaxAltd)
       self.hasMinAltd = bool(self.hasMinAltd)
       self.hasYaw = bool(self.hasYaw)
@@ -372,15 +409,18 @@ float64 z
       self.nav_XYZ_RxRyRz = numpy.frombuffer(str[start:end], dtype=numpy.int32, count=length)
       _x = self
       start = end
-      end += 10
-      (_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed,) = _struct_BiBi.unpack(str[start:end])
+      end += 13
+      (_x.hasYawSpeed, _x.yawSpeed, _x.hasHrzSpeed, _x.hrzSpeed, _x.hasTakeoff, _x.hasLand, _x.forceUnlock,) = _struct_BiBi3B.unpack(str[start:end])
       self.hasYawSpeed = bool(self.hasYawSpeed)
       self.hasHrzSpeed = bool(self.hasHrzSpeed)
+      self.hasTakeoff = bool(self.hasTakeoff)
+      self.hasLand = bool(self.hasLand)
+      self.forceUnlock = bool(self.forceUnlock)
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
 
 _struct_I = genpy.struct_I
-_struct_BiBi = struct.Struct("<BiBi")
+_struct_BiBi3B = struct.Struct("<BiBi3B")
 _struct_3I = struct.Struct("<3I")
-_struct_B6dBiBiBiBiB2iBi4B = struct.Struct("<B6dBiBiBiBiB2iBi4B")
+_struct_B6dBiBiBiBiBiB2iBi2Bi2B = struct.Struct("<B6dBiBiBiBiBiB2iBi2Bi2B")

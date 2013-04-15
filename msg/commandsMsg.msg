@@ -14,8 +14,12 @@ bool hasTwist
 geometry_msgs/Twist twist
 
 # Altitude(self, delta) ******************************************************
-bool hasAltd
-int32 altd
+bool hasAltdDelta
+int32 altdDelta
+
+# Altitude(self, abs) *******************************************************
+bool hasAltdAbs
+int32 altdAbs
 
 # MaxAltd(self, val) *********************************************************
 bool hasMaxAltd
@@ -42,9 +46,10 @@ int32 tagNr
 # Release(self) **************************************************************
 bool hasRelease
 
-# Search(self, tagNr) ********************************************************
+# Search(self, tagNr, startAltd=0) *******************************************
 bool hasSearch
 # int32 tagNr already defined
+int32 searchStartAltd
 
 # Approach(self, tagNr) ******************************************************
 bool hasApproach
@@ -62,9 +67,17 @@ int32 yawSpeed
 bool hasHrzSpeed
 int32 hrzSpeed
 
+# TakeOff(self, tagNr=None) **************************************************
+bool hasTakeoff
+# int32 tagNr already defined
+
+# Land(self, tagNr=None) *****************************************************
+bool hasLand
+# int32 tagNr already defined
+
 # __unlock(self) *************************************************************
 bool forceUnlock
 
 # not implemented by now...
-# TakeOff(self): Land(self): ToggleEmerg(self) *******************************
+# ToggleEmerg(self) *******************************
 # __reset_twist(self, delay = 0) *********************************************
