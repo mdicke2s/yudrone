@@ -192,12 +192,6 @@ class Flight(wx.Frame):
     '''
     Callback function for closing application
     '''
-    if self.droneState != 2 or self.droneState != 0:
-      self.pub_emergency.publish( Empty() )
-    #dlg = wx.MessageDialog(self, "Do you really want to close this application?", "Confirm Exit", wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
-    #result = dlg.ShowModal()
-    #dlg.Destroy()
-    #if result == wx.ID_YES:
     self.Destroy()
     if self.camState == 'bottom':
       subprocess.call(["rosservice","call","/ardrone/togglecam"])
@@ -385,10 +379,7 @@ class Flight(wx.Frame):
     # .............................................................................
     #create node
     rospy.init_node('yudrone_flight')
-    
-    #publishers
-    self.pub_emergency = rospy.Publisher( "ardrone/reset", Empty )		# toggle ardrone emergency state
-    
+        
     #subscribers
     self.sub_nav = rospy.Subscriber( "ardrone/navdata", Navdata, self.handle_navdata )
     self.sub_tags = rospy.Subscriber( "tags", Tags, self.handle_tags )	# obtain tags (only for screen output)

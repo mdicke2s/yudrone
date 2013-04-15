@@ -38,13 +38,13 @@ from std_msgs.msg import Int32
 import math
 
 # Names of patterns
-PATTERNS = {0:'alpha', 1:'4x4_19', 2:'4x4_23', 3:'4x4_29',4:'4x4_45',5:'beta',5:'4x4_47',7:'4x4_49',8:'4x4_83',9:'4x4_89',10:'gamma',11:'4x4_91',12:'4x4_93',13:'4x4_94',14:'4x4_98',15:'delta',16:'cents',17:'eta',18:'hiro',19:'iota',20:'epsilon',21:'kanji',22:'kappa',23:'theta',24:'zeta'}
+PATTERNS = {0:'alpha', 1:'4x4_19', 2:'4x4_23', 3:'4x4_29',4:'4x4_45',5:'beta',6:'4x4_47',7:'4x4_49',8:'4x4_83',9:'4x4_89',10:'gamma',11:'4x4_91',12:'4x4_93',13:'4x4_94',14:'4x4_98',15:'delta',16:'cents',17:'eta',18:'hiro',19:'iota',20:'epsilon',21:'kanji',22:'kappa',23:'theta',24:'zeta'}
 # Facing
 FACESTATES = {0:'YAW', 1:'ALTD', 2:'PERPEND', 3:'DIST'}
 #STATEDURATION = {0:0.5, 1:0.5, 2:1.5, 3:1.0} # change faceState after X seconds
 FACEDIST = 1500 # designated to be 1.5 m far from target
 FACELOSTTIME = 10 # 10 seconds
-FACESTOPTHRESHOLD = 0.15
+FACESTOPTHRESHOLD = 0.10
 # searching (degrees of yaw, altitude)
 #SEARCH = ((-30,0), (90,0), (0,150), (-90,0), (-90,0), (0,-300), (90,0), (90,0), (90,0), (0,600), (-90,0), (-90,0), (-90,0), (-90,0), (0, -450), (1,0))
 SEARCH = ((-30,0), (45,0), (45,0), (45,0), (45,0), (45,0), (45,0), (45,0), (45,0), (1,0))
@@ -74,7 +74,7 @@ class Commands:
     self.__searchState = -1
     self.__searchTagNr = -1
     self.__lockNr = -1
-    self.__lastFaceCorrectionSum = 0.5
+    self.__lastFaceCorrectionSums = {0:0.5, 1:0.5, 2:0.5}
     self.imgheight = 360
     self.imgwidth = 640
 
@@ -92,10 +92,10 @@ class Commands:
     self.sub_com = rospy.Subscriber( "yudrone/commands", commandsMsg, self.handle_command )	# yudrone_cmd listenes command messages
     self.pub_twist = rospy.Publisher( "yudrone/cmd_vel", Twist )	# forwarded to ardrone navigation topic (except if joypad has control)
 
-    # init PIDs (reference, Kp, Ki, Kd, maxIntegral[=0.25/Ki])
-    self.PID_az = PID_controller(0.5, 0.4, 0.005, 1.0, 50)		# yaw to tag controller
-    self.PID_lz = PID_controller(0.5, 0.4, 0.001, 1.0, 250)		# elevate to tag controller
-    self.PID_ly = PID_controller(0.0, 0.1, 0.0005, 1.5, 500)		# move perpendicular to tag controller
+    # init PIDs (reference, Kp, Ki, Kd, maxIntegral[=0.15/Ki])
+    self.PID_az = PID_controller(0.5, 0.4, 0.005, 1.0, 30)		# yaw to tag controller
+    self.PID_lz = PID_controller(0.5, 0.4, 0.001, 1.0, 150)		# elevate to tag controller
+    self.PID_ly = PID_controller(0.0, 0.1, 0.0005, 1.5, 300)		# move perpendicular to tag controller
     self.PID_lx = PID_controller(FACEDIST, 0.00005, 0.000005, 0.001, 500)# distance to tag controller
 
     if flight == None:
@@ -512,12 +512,12 @@ class Commands:
       # PID controller on lx and ly (propably different from used ones)
       self.pub_takeoff.publish( Empty() )
 
-  def Land(self, tagNr = None):
+  def Land(self, tagNr = -1):
     '''
     Action:
       Triggers built-in land command.
     '''
-    if tagNr == None:
+    if tagNr == -1:
       print('Land cmd')
       self.pub_land.publish( Empty() )
     else:
@@ -577,7 +577,7 @@ class Commands:
   '''****************************************************************************************************
   *											high level navigation
   ****************************************************************************************************'''
-  def Face(self, tagNr, faceYaw = True, faceDist = True, faceAlt = True, facePerpend = True, keepSearching = False):
+  def Face(self, tagNr, faceYaw = True, faceDist = True, faceAlt = False, facePerpend = True):
     '''
     Action:
       Faces a specified tag. As long as this tag is visible in the field of view, the Ardrone will
@@ -589,17 +589,16 @@ class Commands:
     if self.__lockNr != -1:
       self.lockWarning() # command is not executed, see function description
     else:
-      print('Faceing "' + PATTERNS[tagNr] + '"')
+      print("Faceing %s"%PATTERNS[tagNr])
       self.__facedTagNr = tagNr
       self.__faceLostCounter = 0
 
-      self.__faceKeepSearching = keepSearching
       self.__faceYaw = faceYaw
       self.__facePerpend = facePerpend
       self.__faceDist = faceDist
       self.__faceAlt = faceAlt
-      self.__faceState = 0 # do one step at a time
-      self.__faceStateCounter = 0
+      #self.__faceState = 0 # do one step at a time
+      #self.__faceStateCounter = 0
 
       # start facing
       self.__onFace()
@@ -635,10 +634,6 @@ class Commands:
       if self.__reset_twist_timer.isAlive():
         # stop last running timer
         self.__reset_twist_timer.shutdown()
-
-      # start search
-      if self.__faceKeepSearching == True:# and self.__searchState == -1:
-	self.Search(self.__facedTagNr)
 
       self.__faceLostCounter += 1
       if self.__faceLostCounter % int(CONTROLLRATE) == 0:	# 10Hz
@@ -714,11 +709,16 @@ class Commands:
       for x in self.__aim.values():
 	correctionSum = correctionSum + abs(x)
       rospy.loginfo('correctionSum (%3f)'%correctionSum)
-      if correctionSum + self.__lastFaceCorrectionSum < FACESTOPTHRESHOLD:
+      if correctionSum < FACESTOPTHRESHOLD and \
+         self.__lastFaceCorrectionSums[0] < FACESTOPTHRESHOLD and \
+         self.__lastFaceCorrectionSums[1] < FACESTOPTHRESHOLD and \
+         self.__lastFaceCorrectionSums[2] < FACESTOPTHRESHOLD:
 	status = commandStatus(id=self.__lockNr, isLocked=True, status="face stable")
 	self.pub_cmdStatus.publish(status)
 	self.__onResetSilent()
-      self.__lastFaceCorrectionSum = correctionSum
+      self.__lastFaceCorrectionSums[2] = self.__lastFaceCorrectionSums[1]
+      self.__lastFaceCorrectionSums[1] = self.__lastFaceCorrectionSums[0]
+      self.__lastFaceCorrectionSums[0] = correctionSum
 
       # // end designated tag in range
 
@@ -727,6 +727,65 @@ class Commands:
       # call again
       rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onFace, oneshot=True)
 
+  def faceBelow(self, tagNr):
+    '''
+    Action:
+      Faces a specified tag with bottom camera
+    Parameter:
+      tagNr (integer)
+    '''
+    if self.__lockNr != -1:
+      self.lockWarning() # command is not executed, see function description
+    else:
+      print("Faceing %s"%PATTERNS[tagNr])
+      self.__facedTagNr = tagNr
+      self.__faceLostCounter = 0
+
+      # start facing
+      self.__onFaceBelow()
+
+  def __onFaceBelow(self, event=None):
+    '''
+    callback for FaceBelow(..)
+    performs face until 'Release()' or tag lost for longer time
+    '''
+    facedTag = self.getTag(self.__facedTagNr)
+    self.__aim['ly'] = 0.0
+    self.__aim['lx'] = 0.0
+
+    if facedTag.diameter == 0:
+      # designated tag is not in range
+      self.__onResetSilent(None) # stop moving (silent)
+      if self.__reset_twist_timer.isAlive():
+        # stop last running timer
+        self.__reset_twist_timer.shutdown()
+
+      self.__faceLostCounter += 1
+      if self.__faceLostCounter % int(CONTROLLRATE) == 0:	# 10Hz
+        rospy.logwarn('tag not in range')
+
+      if self.__faceLostCounter > CONTROLLRATE*FACELOSTTIME:	# after FACELOSTTIME seconds
+        rospy.logerr('tag is lost for %i seconds, faceing canceled'%FACELOSTTIME)
+        self.Release()
+
+    else: # designated tag is in range
+      # face
+      if self.__faceLostCounter > 3: # got lost tag back
+        rospy.loginfo('tag in range')
+      self.__faceLostCounter = 0
+
+      # find tag centre in relation to screen centre
+      centre = self.getCentre(facedTag)
+      cx = centre['x']
+      cy = centre['y']
+
+      self.__aim['ly'] = self.PID_az.update(cx)
+      self.__aim['lx'] = self.PID_lz.update(cy)
+
+    # keep faceing
+    if self.__facedTagNr > -1:
+      # call again
+      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onFaceBelow, oneshot=True)
 
   def Release(self):
     '''
@@ -763,7 +822,8 @@ class Commands:
 	print('approaching start altitude %i'%startAltd)
 	self.__searchStepFinished = False
 	self.Altitude(absolute = startAltd, callback = self.__altdStopSearch)
-      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
+      self.__searchRecallTimer = rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
+      
 
   def __onSearch(self, event=None):
     facedTag = self.getTag(self.__searchTagNr)
@@ -772,15 +832,15 @@ class Commands:
       # search was successful
       self.__unlock("search successful")
       rospy.loginfo("search successful")
-      self.__searchState = 0 # reset search parameter
+      self.__searchState = -1
       self.__searchTagNr = -1
-    elif self.__searchState == -1: # or self.__faceLostCounter < 3 :
+    if self.__searchState == -1 or self.__searchTagNr == -1 :
       # no reason to search
       self.__unlock()
       self.__searchState = 0 # reset search parameter
-    elif self.__searchStepFinished == False:
+    elif self.__searchStepFinished == False or self.__searchRecallTimer.isAlive():
       # wait for step to be done
-      rospy.Timer(rospy.Duration(0.2), self.__onSearch, oneshot=True)
+      rospy.Timer(rospy.Duration(1.0/CONTROLLRATE), self.__onSearch, oneshot=True)
     else:
       # keep searching
       if self.__searchStepFinished == True: # only if last step finished
@@ -801,7 +861,7 @@ class Commands:
 	rospy.Timer(durationStop, self.__onResetSilent, oneshot=True)
 
 	# call again
-	rospy.Timer(durationRecall, self.__onSearch, oneshot=True)
+	self.__searchRecallTimer = rospy.Timer(durationRecall, self.__onSearch, oneshot=True)
       elif altdDelta != 0.0:
 	# lift given delta altitude
 	self.__searchStepFinished = False
@@ -814,6 +874,7 @@ class Commands:
 	rospy.loginfo('search ended')
 	self.__unlock("search not successful")
 	self.__searchState = -1
+	self.__searchTagNr = -1
 	self.__onReset()
 
   def Approach(self, tagNr):
@@ -853,12 +914,14 @@ class Commands:
 
     	# rotate to face the tag
     	self.__aim['az'] = self.PID_az.update(centre['x'])
+    	self.__aim['ly'] = - self.PID_ly.update(facedTag.yRot)
     	self.__aim['lx'] = 0.04
 
-      if self.__approachTagLostCounter > 4:
+      if self.__approachTagLostCounter > 2:
     	# tag is lost for some frames
     	rospy.loginfo("Approach stopped. Eastimated distance is %i"%self.__lastApproachTagDistance)
     	#self.__approachStep = 1
+    	self.__onResetSilent()
     	self.__unlock("approach done")
       else:
     	# call again
