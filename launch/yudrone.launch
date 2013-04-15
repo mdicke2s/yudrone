@@ -1,5 +1,5 @@
 <launch>
-	<rosparam param="joy_node/dev">/dev/input/js1</rosparam>
+	<rosparam param="joy_node/dev">/dev/input/js2</rosparam>
 	<rosparam param="yudrone/ARDRONE_IP">192.168.1.1</rosparam>
 	<rosparam param="yudrone/ROSDIR">/opt/ros/fuerte/bin/</rosparam>
 	<rosparam param="yudrone/ARRECOGDIR">/home/viki/ros_workspace/ar_recog/bin</rosparam>
