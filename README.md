@@ -5,6 +5,7 @@ Ardrone 2.0 Navigation with ROS:
 * depends on ardrone_autonomy (https://github.com/AutonomyLab/ardrone_autonomy)
 * developed within a computer science project at York University, Toronto (https://www.cse.yorku.ca/cshome/)
 * Vision, Graphics, and Robotics Laboratory (http://vgrserver.cse.yorku.ca)
+* Demo-Video and poster (http://www.andrewspeers.com/Andrew_Speers/ARDrone_Graph_Traversal.html)
 
 Status:
 * in development
@@ -39,80 +40,8 @@ To install yudrone:
 
 For more information on the software read file and function headers.
 
-TODOs:
-* 1 demo videos   (due Apr17)
-* 2 poster        (due Apr17)
-* 3 boxes         (due Apr10)
-* 4 final report  (due Apr25)
-* 5 thesis draft  (due Apr25)
-* 6 (paper draft)
-
-Schedule:
-<table>
-  <tr>
-    <th>Day</th>
-    <th>Time</th>
-    <th>goal</th>
-    <th>done</th>
-  </tr>
-  <tr>
-    <td>Fr 5</td>
-    <td>8am-3pm</td>
-    <td>state machine and yudrone_cmd are joined</td>
-    <td>done for face and search</td>
-  </tr>
-  <tr>
-    <td>Weekend</td>
-    <td></td>
-    <td>in yudrone_cmd: timers are substituted with event-queue</td>
-    <td>skipped, changed yaw control instaed</td>
-  </tr>
-  <tr>
-    <td>Mo 8</td>
-    <td>10am-4pm</td>
-    <td>PID controller and setup</td>
-    <td>done</td>
-  </tr>
-  <tr>
-    <td>Tu 9</td>
-    <td>8am-4pm</td>
-    <td>enrich state machine<br/>implement approach</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>Th 11</td>
-    <td>3am-6pm</td>
-    <td>box(es) build and tags printed</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>Fr 12</td>
-    <td>8am-5pm</td>
-    <td>experimental run successfull, video</td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>Weekend</td>
-    <td>poster</td>
-    <td></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>Mo 15</td>
-    <td>8am-5pm</td>
-    <td></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td>Tu 16</td>
-    <td>8am-5pm</td>
-    <td>poster printed</td>
-    <td></td>
-  </tr>
-</table>
-
 Notes:
-Approach target is supposed to work like this
+TARGET_APPROACH target is supposed to work like this
 * face and wait for sum of errors to be low (stable position at 1600mm distance)
 * gently decrease distance
  * best case until tag fills video frame
