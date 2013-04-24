@@ -75,7 +75,7 @@ class ydState(smach.State):
 class GetNode(ydState):
     def __init__(self):
         ydState.__init__(self)
-        smach.State.__init__(self, outcomes=['no_node','acquired_node', 'land', 'take_off'], output_keys=['tagNr', 'lastCmd', 'lastCmdStatus'])      
+        smach.State.__init__(self, outcomes=['no_node','acquired_node', 'land', 'take_off', 'finished'], output_keys=['tagNr', 'lastCmd', 'lastCmdStatus'])      
 
     def execute(self, userdata):
 	userdata.lastCmdStatus = self.lastCmdStatus
@@ -398,7 +398,8 @@ def main():
                                transitions={'no_node':'GET',
                                'take_off':'TAKEOFF',
                                'land':'LAND',
-                               'acquired_node':'SEARCH'})
+                               'acquired_node':'SEARCH',
+                               'finished':'landed'})
         smach.StateMachine.add('TAKEOFF', TakeOffNode(), 
                                transitions={'taking_off':'TAKEOFF', 
                                'in_flight':'GET'})
@@ -427,12 +428,13 @@ def main():
     
     
     # Create and start the introspection server
-    sis = smach_ros.IntrospectionServer('yudrone_states', sm, 'yodrone/stateMachine')
+    sis = smach_ros.IntrospectionServer('yudrone_states', sm, 'yudrone/stateMachine')
     sis.start()
     
     # Execute SMACH plan
     outcome = sm.execute()
     rospy.loginfo('State Machine finsihed with "%s".'%outcome)
+    rospy.spin() # wait for Ctrl-C
     sis.stop()
 
 if __name__ == '__main__':
